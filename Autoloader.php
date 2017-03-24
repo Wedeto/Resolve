@@ -25,7 +25,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 namespace WASP\Resolve;
 
-use WASP\Debu;
 use Psr\Log\LoggerInterface;
 
 /**

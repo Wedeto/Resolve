@@ -25,12 +25,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 namespace WASP\Resolve;
 
-use WASP\Debug\LoggerAwareStaticTrait;
-use WASP\Debug;
-use WASP\HttpError;
+use WASP\Log\LoggerAwareStaticTrait;
+use WASP\HTTP\Error as HTTPError;
 use WASP\Translate;
 use WASP\Util\Cache;
-use WASP\Path;
+use WASP\Platform\Path;
 
 /**
  * Resolve templates, routes, clases and assets from the core and modules.
