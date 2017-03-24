@@ -29,7 +29,7 @@ use WASP\Debug\LoggerAwareStaticTrait;
 use WASP\Debug;
 use WASP\HttpError;
 use WASP\Translate;
-use WASP\Cache;
+use WASP\Util\Cache;
 use WASP\Path;
 
 /**
