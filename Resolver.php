@@ -25,7 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 namespace WASP\Resolve;
 
-use WASP\Log\LoggerAwareStaticTrait;
+use WASP\Util\LoggerAwareStaticTrait;
 use WASP\HTTP\Error as HTTPError;
 use WASP\Translate;
 use WASP\Util\Cache;
@@ -59,6 +59,7 @@ class Resolver
      */
     public function __construct(Path $path)
     {
+        self::getLogger();
         $this->modules = array('core' => $path->core);
         $this->cache = new Cache('resolve');
         $this->path = $path;
@@ -380,7 +381,3 @@ class Resolver
         return null;
     }
 }
-
-// @codeCoverageIgnoreStart
-Resolver::setLogger();
-// @codeCoverageIgnoreEnd
