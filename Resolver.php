@@ -26,19 +26,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 namespace WASP\Resolve;
 
 use WASP\Util\LoggerAwareStaticTrait;
-use WASP\HTTP\Error as HTTPError;
 use WASP\Util\Cache;
-use WASP\Platform\Path;
 
 /**
- * Resolve templates, routes, clases and assets from the core and modules.
+ * Resolve templates, routes and assets from the core and modules.
  */
 class Resolver
 {
     use LoggerAwareStaticTrait;
-
-    /** Path configuration */
-    private $path;
 
     /** A list of installed modules */
     private $modules;
@@ -53,15 +48,13 @@ class Resolver
     private $module_init = false;
 
     /**
-     * Set up the resolve cache. Should be called just once, at the bottom of
-     * this script, but repeated calling won't break anything.
+     * Set up the resolve cache. 
      */
-    public function __construct(Path $path)
+    public function __construct(string $core_path)
     {
         self::getLogger();
-        $this->modules = array('core' => $path->core);
+        $this->modules = array('core' => $core_path);
         $this->cache = new Cache('resolve');
-        $this->path = $path;
     }
 
     /** 
@@ -72,7 +65,7 @@ class Resolver
     {
         $dirs = glob($module_path . '/*');
 
-        $modules = array('core' => $this->path->core);
+        $modules = array('core' => $this->modules['core']);
         foreach ($dirs as $dir)
         {
             if (!is_dir($dir))
@@ -155,7 +148,7 @@ class Resolver
     
     /**
      * Find files and directories in a directory. The contents are filtered on
-     * .php files and .wasp files.
+     * .php files and files.
      *
      * @param $dir string The directory to list
      * @param $recursive boolean Whether to also scan subdirectories
@@ -167,7 +160,7 @@ class Resolver
         $subdirs = array();
         foreach (glob($dir . "/*") as $entry)
         {
-            if (substr($entry, -4) === ".php" || substr($entry, -5) === ".wasp")
+            if (substr($entry, -4) === ".php")
             {
                 $contents[] = $entry;
             }
@@ -177,24 +170,18 @@ class Resolver
             }
         }
 
-        // Sort the direct contents of the directory so that .wasp and index.php come first
+        // Sort the direct contents of the directory so that index.php comes first
         usort($contents, function ($a, $b) {
             $sla = strlen($a);
             $slb = strlen($b);
             
-            // .wasp files come first
-            $a_wasp = substr($a, -10) === "/.wasp";
-            $b_wasp = substr($b, -10) === "/.wasp";
-            if ($a_wasp !== $b_wasp)
-                return $a_wasp ? -1 : 1;
-
-            // index files come second
+            // index files come first
             $a_idx = substr($a, -10) === "/index.php";
             $b_idx = substr($b, -10) === "/index.php";
             if ($a_idx !== $b_idx)
                 return $a_idx ? -1 : 1;
 
-            // Finally, sort alphabetically
+            // sort the rest alphabetically
             return strcasecmp($a, $b);
         });
 

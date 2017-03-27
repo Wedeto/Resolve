@@ -32,6 +32,11 @@ use Psr\Log\LoggerInterface;
  * PSR-4, but registerNS can be instructed to treat a namespace as PSR-0
  * compatible. Alternatively, you can even provide a custom function to use as
  * a loader for a specific namespace.
+ *
+ * This class loader can be used in general, however, it is built for the WASP
+ * platform so that the module loader can register namespaces in a predictable
+ * manner. It therefore prepends itself upon load to the autoloader queue,
+ * rather than appending.
  */
 final class Autoloader
 {
@@ -39,7 +44,7 @@ final class Autoloader
     const PSR4 = 4;
 
     protected static $logger = null;
-    private static $loaders = array();
+    private static $root_namespace = [];
 
     public static function setLogger(LoggerInterface $logger)
     {
@@ -60,43 +65,40 @@ final class Autoloader
     public function registerNS(string $ns, string $path, $standard = Autoloader::PSR4)
     {
         if (!file_exists($path) || !is_dir($path) || !is_readable($path))
-            throw new \RuntimeException("Path $path is not readable");
+            throw new \InvalidArgumentException("Path $path is not readable");
 
         if ($standard !== Autoloader::PSR0 && $standard !== Autoloader::PSR4 && !is_callable($standard))
-            throw new \RuntimeException("Invalid standard: $standard");
+            throw new \InvalidArgumentException("Invalid standard: $standard");
 
         // Strip a leading namespace separator
-        if (substr($ns, 0, 1) === '\\')
-            $ns = substr($ns, 1);
+        $ns = trim($ns, '\\');
+
+        if (empty($ns))
+            throw new \InvalidArgumentException("Cannot register empty namespace");
+
+        // Get the namespace parts
+        $parts = explode('\\', $ns);
 
         // Make sure there is a trailing namespace separator
         if (substr($ns, -1, 1) !== '\\')
             $ns .= '\\';
 
-        $parts = array_filter(explode('\\', $ns));
-
-        $ref = &self::$loaders;
-        $ns_path = "";
+        $loaders = array();
+        $ns = ""; 
+        $ref = &self::$root_namespace;
         foreach ($parts as $part)
         {
-            $ns_path .= $part . '\\';
-            if (isset($ref[$part]['loader']))
-                throw new \RuntimeException("Cannot override namespace $ns_path");
+            if (!isset($ref['sub_ns'][$part]))
+                $ref['sub_ns'][$part] = ['loaders' => [], 'sub_ns' => []];
 
-            if (!isset($ref[$part]))
-                $ref[$part] = array();
-
-            $ref = &$ref[$part];
+            $ref = &$ref['sub_ns'][$part];
         }
 
-        if (!empty($ref))
-            throw new \RuntimeException("Cannot override namespace $ns_path");
-
-        // Register the namespace
-        $ref['loader'] = true;
-        $ref['std'] = $standard;
-        $ref['path'] = $path;
-        $ref['ns'] = $ns;
+        $ref['loaders'][] = [
+            'ns' => $ns,
+            'path' => $path,
+            'std' => $standard
+        ];
     }
     
     /**
@@ -104,19 +106,31 @@ final class Autoloader
      * http://www.php-fig.org/psr/psr-0/
      *
      * @param $ns string The namespace of the class
-     * @param $class_name string The class to locatae
+     * @param $class_name string The class to locate
      * @param $path string The path where the namespace classes are located
      * @return string The path to the class file. Null when not found
      */
     public static function findPSR0($ns, $class_name, $path)
     {
         $class = str_replace($ns, "", $class_name);
-        $class_file = str_replace('\\', DIRECTORY_SEPARATOR, $class);
-        $class_file = str_replace('_', DIRECTORY_SEPARATOR, $class) . '.php';
+        $last_ns = strrpos($class, '\\');
+        if ($last_ns !== false)
+        {
+            $prefix = substr($class, 0, $last_ns + 1);
+            $class = substr($class, $last_ns + 1);
+        }
+        else
+        {
+            $prefix = "";
+        }
 
-        $class_path = $path . DIRECTORY_SEPARATOR . $class_file;
+        $prefix = str_replace('\\', DIRECTORY_SEPARATOR, $prefix);
+        $class_file = str_replace('_', DIRECTORY_SEPARATOR, $class) . '.php';
+        $class_path = $path . DIRECTORY_SEPARATOR . $prefix . $class_file;
+
         if (file_exists($class_path))
             return $class_path;
+
         return null;
     }
 
@@ -137,6 +151,7 @@ final class Autoloader
         $class_path = $path . DIRECTORY_SEPARATOR . $class_file;
         if (file_exists($class_path))
             return $class_path;
+
         return null;
     }
 
@@ -146,36 +161,37 @@ final class Autoloader
     public static function autoload($class_name)
     {
         $parts = explode('\\', $class_name);
-        $ref = self::$loaders;
+        $ref = &self::$root_namespace;
+
+        $path = null;
         foreach ($parts as $part)
         {
-            if (!isset($ref[$part]))
+            if (!isset($ref['sub_ns'][$part]))
                 return;
 
-            $ref = $ref[$part];
-            if (isset($ref['loader']))
-                break;
-        }
+            $ref = &$ref['sub_ns'][$part];
+            foreach ($ref['loaders'] as $loader)
+            {
+                if ($loader['std'] === self::PSR0)
+                    $path = self::findPSR0($loader['ns'], $ref['path']);
+                elseif ($loader['std'] === self::PSR4)
+                    $path = self::findPSR4($loader['ns'], $ref['path']);
+                else
+                {
+                    try
+                    { // Make sure we don't throw any exceptions
+                        $path = $loader['std']($class_name);
+                    }
+                    catch (\Throwable $e)
+                    {}
+                }
 
-        // We have a loader
-        $path = "";
-        if ($ref['std'] === self::PSR0)
-        {
-            $path = self::findPSR0($ref['ns'], $class_name, $ref['path']);
-        }
-        elseif (is_callable($ref['std']))
-        {
-            try
-            { // Make sure we don't throw any exceptions
-                $path = $ref['std']($class_name);
+                if (!empty($path))
+                    break;
             }
-            catch (\Throwable $e)
-            {}
-        }
-        else
-        {
-            // Default to PSR-4
-            $path = self::findPSR4($ref['ns'], $class_name, $ref['path']);
+
+            if ($path)
+                break;
         }
 
         if (!$path)
@@ -199,4 +215,4 @@ final class Autoloader
 }
 
 // Set up the autoloader
-spl_autoload_register(array(Autoloader::class, 'autoload'));
+spl_autoload_register(array(Autoloader::class, 'autoload'), true, true);
