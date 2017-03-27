@@ -27,7 +27,6 @@ namespace WASP\Resolve;
 
 use WASP\Util\LoggerAwareStaticTrait;
 use WASP\HTTP\Error as HTTPError;
-use WASP\Translate;
 use WASP\Util\Cache;
 use WASP\Platform\Path;
 
