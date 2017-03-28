@@ -84,7 +84,6 @@ final class Autoloader
             $ns .= '\\';
 
         $loaders = array();
-        $ns = ""; 
         $ref = &self::$root_namespace;
         foreach ($parts as $part)
         {
@@ -173,9 +172,9 @@ final class Autoloader
             foreach ($ref['loaders'] as $loader)
             {
                 if ($loader['std'] === self::PSR0)
-                    $path = self::findPSR0($loader['ns'], $ref['path']);
+                    $path = self::findPSR0($loader['ns'], $class_name, $loader['path']);
                 elseif ($loader['std'] === self::PSR4)
-                    $path = self::findPSR4($loader['ns'], $ref['path']);
+                    $path = self::findPSR4($loader['ns'], $class_name, $loader['path']);
                 else
                 {
                     try
