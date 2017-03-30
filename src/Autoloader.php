@@ -1,7 +1,6 @@
 <?php
-
 /*
-This is part of WASP, the Web Application Software Platform.
+This is part of Wedeto, the WEb DEvelopment TOolkit.
 It is published under the MIT Open Source License.
 
 Copyright 2017, Egbert van der Wal
@@ -23,7 +22,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
-namespace WASP\Resolve;
+namespace Wedeto\Resolve;
 
 use Psr\Log\LoggerInterface;
 
@@ -33,7 +32,7 @@ use Psr\Log\LoggerInterface;
  * compatible. Alternatively, you can even provide a custom function to use as
  * a loader for a specific namespace.
  *
- * This class loader can be used in general, however, it is built for the WASP
+ * This class loader can be used in general, however, it is built for the Wedeto
  * platform so that the module loader can register namespaces in a predictable
  * manner. It therefore prepends itself upon load to the autoloader queue,
  * rather than appending.

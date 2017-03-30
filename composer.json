@@ -1,27 +1,27 @@
 {
-    "name": "wasp/resolve",
+    "name": "wedeto/resolve",
     "license": "MIT",
-    "description": "WASP Platform - Autoloader, template, asset and app resolver",
-    "homepage": "https://wasp.systems/",
+    "description": "Wedeto Platform - Autoloader, template, asset and app resolver",
+    "homepage": "https://wedeto.net/",
     "require": {
-        "WASP/Util": "@dev",
+        "Wedeto/Util": "@dev",
         "php": ">=7.0.0"
     },
     "autoload": {
         "psr-4": {
-            "WASP\\Resolve\\": "src/"
+            "Wedeto\\Resolve\\": "src/"
         }
     },
     "authors": [
         {
             "name": "Egbert van der Wal",
-            "email": "egbert@wasp.systems"
+            "email": "ewal@pointpro.nl"
         }
     ],
     "repositories": [
         {
             "type": "vcs",
-            "url": "https://github.com/WASP-Systems/Util"
+            "url": "https://github.com/Wedeto/Util"
         }
     ]
 }

@@ -1,20 +1,4 @@
-WASP is licensed using a MIT license. Some classes were imported and adapted
-from other open source projects:
-
-* WASP\Util\Encoding
-Adapted from: ForceUTF8\Encoding - https://github.com/neitanod/forceutf8
-Copyright (c) 2008 Sebastián Grignol
-License: Revised BSD
-
-
-* WASP\Util\Translator\*
-Adapted from: Zend Framework - Zend\Translator - https://framework.zend.com
-Copyright: (c) 2005-2015 Zend Technologies USA Inc. (http://www.zend.com)
-License: New BSD License
-License URL: http://framework.zend.com/license/new-bsd
-
-
-The rest of WASP is covered by the MIT license, detailed below.
+Wedeto\Resolve is published under the MIT license.
 
 MIT License
 

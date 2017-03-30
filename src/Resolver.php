@@ -1,7 +1,6 @@
 <?php
-
 /*
-This is part of WASP, the Web Application Software Platform.
+This is part of Wedeto, the WEb DEvelopment TOolkit.
 It is published under the MIT Open Source License.
 
 Copyright 2017, Egbert van der Wal
@@ -23,10 +22,10 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
-namespace WASP\Resolve;
+namespace Wedeto\Resolve;
 
-use WASP\Util\LoggerAwareStaticTrait;
-use WASP\Util\Cache;
+use Wedeto\Util\LoggerAwareStaticTrait;
+use Wedeto\Util\Cache;
 
 /**
  * Resolve templates, routes and assets from the core and modules.
@@ -78,7 +77,7 @@ class Resolver
 
             if (!($has_lib || $has_template || $has_app || $has_assets))
             {
-                self::$logger->info("WASP.Resolve.Resolver", "Path {} does not contain any usable elements", $dir);
+                self::$logger->info("Wedeto.Resolve.Resolver", "Path {} does not contain any usable elements", $dir);
                 continue;
             }
             
