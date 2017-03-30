@@ -1,0 +1,27 @@
+{
+    "name": "wasp/resolve",
+    "license": "MIT",
+    "description": "WASP Platform - Autoloader, template, asset and app resolver",
+    "homepage": "https://wasp.systems/",
+    "require": {
+        "WASP/Util": "@dev",
+        "php": ">=7.0.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "WASP\\Resolve\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Egbert van der Wal",
+            "email": "egbert@wasp.systems"
+        }
+    ],
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/WASP-Systems/Util"
+        }
+    ]
+}
