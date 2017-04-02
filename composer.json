@@ -7,6 +7,10 @@
         "Wedeto/Util": "@dev",
         "php": ">=7.0.0"
     },
+    "require-dev": {
+        "mikey179/vfsStream": "~1",
+        "Wedeto/Log": "@dev"
+    },
     "autoload": {
         "psr-4": {
             "Wedeto\\Resolve\\": "src/"
@@ -22,6 +26,10 @@
         {
             "type": "vcs",
             "url": "https://github.com/Wedeto/Util"
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/Wedeto/Log"
         }
     ]
 }

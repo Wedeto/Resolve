@@ -24,7 +24,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 namespace Wedeto\Resolve;
 
+use ReflectionClass;
+
 use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
+use Wedeto\Util\Cache;
+use Wedeto\Util\DefVal;
 
 /**
  * Autoloader that implements PSR-0 and PSR-4 standards. By default it will use
@@ -43,61 +48,55 @@ final class Autoloader
     const PSR4 = 4;
 
     protected static $logger = null;
-    private $cache;
-    private $root_namespace = [];
+    private $cache = null;
+    private $authorative = false;
+    private $root_namespace = ['sub_ns' => [], 'loaders' => []];
 
     public static function setLogger(LoggerInterface $logger)
     {
         self::$logger = $logger;
     }
+
+    /**
+     * @codeCoverageIgnore The NullLogger can only be set once, automatically. Unpredictable in testing
+     */
+    public static function getLogger()
+    {
+        if (self::$logger === null)
+            self::$logger = new NullLogger;
+        return self::$logger;
+    }
     
     /**
-     * Register a namespace with the autoloader.
-     * 
-     * @param $ns string The namespace to register
-     * @param $path string The path where to find classes in this namespace
-     * @param $standard mixed Autoloader::PSR4 or Autoloader::PSR0. PSR4 is
-     *                        used by default. You may also provide a callback
-     *                        function here that will be used as the loader for
-     *                        this namespace, rather than the provided PSR-0
-     *                        and PSR-4 loaders.
+     * Find all .php source files in the specified path or any subdirectory,
+     * and return them in an array.
+     *
+     * @return array The list of .php files.
      */
-    public function registerNS(string $ns, string $path, $standard = Autoloader::PSR4)
+    public static function findSourceFiles(string $path)
     {
-        if (!file_exists($path) || !is_dir($path) || !is_readable($path))
-            throw new \InvalidArgumentException("Path $path is not readable");
+        $result = array();
+        $reader = dir($path);
 
-        if ($standard !== Autoloader::PSR0 && $standard !== Autoloader::PSR4 && !is_callable($standard))
-            throw new \InvalidArgumentException("Invalid standard: $standard");
-
-        // Strip a leading namespace separator
-        $ns = trim($ns, '\\');
-
-        if (empty($ns))
-            throw new \InvalidArgumentException("Cannot register empty namespace");
-
-        // Get the namespace parts
-        $parts = explode('\\', $ns);
-
-        // Make sure there is a trailing namespace separator
-        if (substr($ns, -1, 1) !== '\\')
-            $ns .= '\\';
-
-        $loaders = array();
-        $ref = &self::$root_namespace;
-        foreach ($parts as $part)
+        while ($file = $reader->read())
         {
-            if (!isset($ref['sub_ns'][$part]))
-                $ref['sub_ns'][$part] = ['loaders' => [], 'sub_ns' => []];
+            if ($file === '.' || $file === '..')
+                continue;
 
-            $ref = &$ref['sub_ns'][$part];
+            $file = $path . '/' . $file;
+            if (substr($file, -4) === ".php")
+            {
+                $result[] = $file;
+            }
+            elseif (is_dir($file))
+            {
+                $sub = self::findSourceFiles($file);
+                foreach ($sub as $f)
+                    $result[] = $f;
+            }
         }
 
-        $ref['loaders'][] = [
-            'ns' => $ns,
-            'path' => $path,
-            'std' => $standard
-        ];
+        return $result;
     }
     
     /**
@@ -154,67 +153,266 @@ final class Autoloader
         return null;
     }
 
-    public function __construct()
+    /**
+     * Set the cache object caching resolved classes
+     * @param Cache $cache The cache to use
+     * @return Autoloader Provides fluent interface
+     */
+    public function setCache(Cache $cache)
     {
-        $this->cache = new Cache('wedeto_autoloader');
+        $this->cache = $cache;
+        return $this;
+    }
+
+    /** 
+     * @return Cache the cache object in use
+     */
+    public function getCache()
+    {
+        return $this->cache;
     }
 
     /**
+     * Set the authorative state
+     * @param bool $authorative When true, classes without a cache entry are considered
+     *                          non-existent. On the first call to autoload, the cache
+     *                          is built if this wasn't done before. Without a cache,
+     *                          this flag is useless and ignored.
+     * @return Autoloader Provides fluent interface
+     */
+    public function setAuthorative(bool $authorative = true)
+    {
+        $this->authorative = $authorative;
+        return $this;
+    }
+
+    /**
+     * @return bool The authorative state. When true, the autoloader will not attempt to
+     *              load classes where no cache entry exists for.
+     */
+    public function getAuthorative()
+    {
+        return $this->authorative;
+    }
+
+    /**
+     * Register a namespace with the autoloader.
+     * 
+     * @param $ns string The namespace to register
+     * @param $path string The path where to find classes in this namespace
+     * @param $standard mixed Autoloader::PSR4 or Autoloader::PSR0. PSR4 is
+     *                        used by default. You may also provide a callback
+     *                        function here that will be used as the loader for
+     *                        this namespace, rather than the provided PSR-0
+     *                        and PSR-4 loaders.
+     */
+    public function registerNS(string $ns, string $path, $standard = Autoloader::PSR4)
+    {
+        if (!file_exists($path) || !is_dir($path) || !is_readable($path))
+            throw new \InvalidArgumentException("Path $path is not readable");
+
+        if ($standard !== Autoloader::PSR0 && $standard !== Autoloader::PSR4 && !is_callable($standard))
+            throw new \InvalidArgumentException("Invalid standard: $standard");
+
+        // Strip a leading namespace separator
+        $ns = trim($ns, '\\');
+
+        // Get the namespace parts
+        $parts = explode('\\', $ns);
+
+        // Make sure there is a trailing namespace separator
+        if ($ns !== "" && substr($ns, -1, 1) !== '\\')
+            $ns .= '\\';
+
+        $ref = &$this->root_namespace;
+        foreach ($parts as $part)
+        {
+            // Registering empty namespace
+            if ($part === "")
+                break;
+
+            if (!isset($ref['sub_ns'][$part]))
+                $ref['sub_ns'][$part] = ['loaders' => [], 'sub_ns' => []];
+
+            $ref = &$ref['sub_ns'][$part];
+        }
+
+        $ref['loaders'][] = [
+            'ns' => $ns,
+            'path' => $path,
+            'std' => $standard
+        ];
+    }
+    
+
+    /**
+     * Build or rebuild the class cache. This will scan all defined PSR4 paths for .php files, 
+     * deduce the resulting classname from the path and add the path to the cache.
+     *
+     * Note: This works only when solely PSR4 namespaces are defined. There is
+     * ambiguity in the file path -> class name for PSR0-based namespaces as
+     * directory separators can be converted to either namespace separators or
+     * underscores. To avoid this ambiguity, a exception is thrown when PSR0 namespaces
+     * have been registered.
+     *
+     * Note: If any of the paths contain files that are not PSR4 compatible, errors may occur,
+     * because the files are not actually loaded to check if they contain the correct class.
+     * When two or more files map to the same class name, a LogicException is thrown.
+     */
+    public function buildCache()
+    {
+        if ($this->cache === null)
+            throw new \LogicException("Cannot build cache without a cache instance");
+        
+        $this->cache->set('cache_built', false);
+        $this->cache->set('classpaths', array());
+        
+        $stack = array($this->root_namespace);
+        
+        while (!empty($stack))
+        {
+            $ref = array_pop($stack);
+            foreach ($ref['loaders'] as $loader)
+            {
+                if ($loader['std'] !== Autoloader::PSR4)
+                    throw new \LogicException("Cache builder only works with pure PSR4-based namespaces");
+
+                $class_count = 0;
+                $root = $loader['path'] . DIRECTORY_SEPARATOR;
+                $ns = $loader['ns'];
+                $php_files = self::findSourceFiles($loader['path']);
+                foreach ($php_files as $file)
+                {
+                    $rel_file = substr($file, strlen($root));
+
+                    // Store absolute resolved paths when not using stream wrappers
+                    if (strpos($file, '://') === false) $file = realpath($file);
+                    $parts = explode(DIRECTORY_SEPARATOR, $rel_file);
+                    $class_name = substr($ns . implode('\\', $parts), 0, -4);
+                    if ($this->cache->has('classpaths', $class_name))
+                    {
+                        $conflict = $this->cache->get('classpaths', $class_name);
+                        throw new \LogicException(sprintf(
+                            "Duplicate class definition in file %s and %s (conflicting namespace: %s)", 
+                            $file,
+                            $conflict,
+                            $ns
+                        ));
+                    }
+
+                    $this->cache->put('classpaths', $class_name, $file);
+                    ++$class_count;
+                }
+                self::getLogger()->info('Found {0} classes in namespace {1}', [$class_count, $ns]);
+            }
+
+            foreach ($ref['sub_ns'] as $sub_ns)
+                array_push($stack, $sub_ns);
+        }
+
+        $this->cache->set('cache_built', true);
+        self::getLogger()->info('Class cache built');
+    }
+
+
+    /**
      * The spl_autoloader that loads classes registered namespaces
+     * @param string $class_name The class to load
      */
     public function autoload($class_name)
     {
-        $parts = explode('\\', $class_name);
-        $ref = &$this->root_namespace;
-
-        $path = null;
-        foreach ($parts as $part)
-        {
-            if (!isset($ref['sub_ns'][$part]))
-                return;
-
-            $ref = &$ref['sub_ns'][$part];
-            foreach ($ref['loaders'] as $loader)
-            {
-                if ($loader['std'] === self::PSR0)
-                    $path = self::findPSR0($loader['ns'], $class_name, $loader['path']);
-                elseif ($loader['std'] === self::PSR4)
-                    $path = self::findPSR4($loader['ns'], $class_name, $loader['path']);
-                else
-                {
-                    try
-                    { // Make sure we don't throw any exceptions
-                        $path = $loader['std']($class_name);
-                    }
-                    catch (\Throwable $e)
-                    {}
-                }
-
-                if (!empty($path))
-                    break;
-            }
-
-            if ($path)
-                break;
-        }
-
-        if (!$path)
+        // Basic check
+        if (class_exists($class_name, false))
             return;
 
-        require_once $path;
-            
-        // Perform some logging when the logger is available
-        if (self::$logger)
+        // Use cache when available
+        if ($this->cache !== null)
         {
-            if (trait_exists($class_name))
-                self::$logger->debug("Loaded trait {0} from path {1}", [$class_name, $path]);
-            elseif (interface_exists($class_name))
-                self::$logger->debug("Loaded interface {0} from path {1}", [$class_name, $path]);
-            elseif (class_exists($class_name))
-                self::$logger->debug("Loaded class {0} from path {1}", [$class_name, $path]);
-            else
-                self::$logger->error("File {0} does not contain class {1}", [$path, $class_name]);
+            $cache_built = $this->cache->get('cache_built', new DefVal(false));
+            if ($this->authorative && !$cache_built)
+            {
+                try
+                {
+                    // Disable authorative mode temporarily because build cache
+                    // may trigger autoloading, which will lead to recursion
+                    // with authorativeness enabled.
+                    $this->authorative = false;
+                    $this->buildCache();
+                    $this->authorative = true;
+                }
+                catch (\Throwable $e)
+                {
+                    self::getLogger()->emergency(
+                        'Exception while building cache: {exception}. ' .
+                        'Disabling cache and authorative mode - performance will deteriorate',
+                        ['exception' => $e]
+                    );
+                    $this->cache = null;
+                }
+            }
+
+            $path = $this->cache->get('classpaths', $class_name);
+            if (!empty($path))
+                require_once $path;
+            elseif ($this->authorative)
+                return; // Authorative, no match found, so no loading
+
+            // No match found, not authorative. Keep looking
         }
+
+        $loaders = $this->getClassLoaders($class_name);
+        foreach ($loaders as $loader)
+        {
+            $path = null;
+            if ($loader['std'] === Autoloader::PSR0)
+            {
+                $path = self::findPSR0($loader['ns'], $class_name, $loader['path']);
+            }
+            elseif ($loader['std'] === Autoloader::PSR4)
+            {
+                $path = self::findPSR4($loader['ns'], $class_name, $loader['path']);
+            }
+            elseif (is_callable($loader['std']))
+            {
+                try
+                {
+                    $path = $loader['std']($class_name);
+                }
+                catch (\Throwable $e)
+                {
+                    self::getLogger()->critical(
+                        'Class loader for {ns} threw exception with ' .
+                        'attempting to load class {class}: {exception}', 
+                        ['ns' => $loader['ns'], 'exception' => $e, 'class' => $class_name]
+                    );
+                } // Don't throw any errors
+            }
+
+            if (empty($path))
+                continue;
+
+            require_once $path;
+
+            if (self::$logger)
+            {
+                if (class_exists($class_name, false))
+                {
+                    if (trait_exists($class_name))
+                        self::$logger->debug("Loaded trait {0} from path {1}", [$class_name, $path]);
+                    elseif (interface_exists($class_name))
+                        self::$logger->debug("Loaded interface {0} from path {1}", [$class_name, $path]);
+                    else
+                        self::$logger->debug("Loaded class {0} from path {1}", [$class_name, $path]);
+                    break;
+                }
+                else
+                    self::$logger->error("File {0} does not contain class {1}", [$path, $class_name]);
+            }
+        }
+
+        // Cache resolved path
+        if (!empty($path) && $this->cache !== null)
+            $this->cache->put('classpaths', $class_name, $path);
     }
 
     public static function findComposerAutoloader()
@@ -225,7 +423,10 @@ final class Autoloader
             if (substr($cl, 0, 18) === "ComposerAutoloader")
                 return $cl;
 
+        // @codeCoverageIgnoreStart
+        // Tests run using composer autoloader
         return null;
+        // @codeCoverageIgnoreEnd
     }
 
     public function importComposerAutoloaderConfiguration(string $composer_loader_class)
@@ -234,23 +435,44 @@ final class Autoloader
         $file = $ref->getFileName();
 
         $cdir = dirname($file);
-        $psr0 = $cdir . DIRECTORY_SEPARATOR . 'autoloader_psr0.php';
+        $psr0 = $cdir . DIRECTORY_SEPARATOR . 'autoload_psr0.php';
         if (file_exists($psr0))
         {
             $namespaces = include($psr0);
-            foreach ($namespaces as $ns => $path)
-                $this->registerNS($ns, $path, Autoloader::PSR0)
+            foreach ($namespaces as $ns => $paths)
+                foreach ($paths as $path)
+                    $this->registerNS($ns, $path, Autoloader::PSR0);
         }
 
-        $psr4 = $cdir . DIRECTORY_SEPARATOR . 'autoloader_psr4.php';
+        $psr4 = $cdir . DIRECTORY_SEPARATOR . 'autoload_psr4.php';
         if (file_exists($psr4))
         {
             $namespaces = include($psr4);
-            foreach ($namespaces as $ns => $path)
-                $this->registerNS($ns, $path, Autoloader::PSR4)
+            foreach ($namespaces as $ns => $paths)
+                foreach ($paths as $path)
+                    $this->registerNS($ns, $path, Autoloader::PSR4);
         }
     }
-}
 
-// Set up the autoloader
-spl_autoload_register(array(Autoloader::class, 'autoload'), true, true);
+    public function getClassLoaders(string $namespace)
+    {
+        $parts = explode("\\", $namespace);
+        $result = array();
+        $ref = &$this->root_namespace;
+        $sub_ns = "";
+        foreach ($parts as $part)
+        {
+            foreach ($ref['loaders'] as $loader)
+                $result[] = $loader;
+
+            if (!isset($ref['sub_ns'][$part]))
+                break;
+
+            $ref = &$ref['sub_ns'][$part];
+        }
+
+        // Reverse the result, because the last one is the most specific
+        // namespace, which would be the one to try first.
+        return array_reverse($result);
+    }
+}
