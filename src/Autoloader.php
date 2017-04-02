@@ -43,7 +43,8 @@ final class Autoloader
     const PSR4 = 4;
 
     protected static $logger = null;
-    private static $root_namespace = [];
+    private $cache;
+    private $root_namespace = [];
 
     public static function setLogger(LoggerInterface $logger)
     {
@@ -153,13 +154,18 @@ final class Autoloader
         return null;
     }
 
+    public function __construct()
+    {
+        $this->cache = new Cache('wedeto_autoloader');
+    }
+
     /**
      * The spl_autoloader that loads classes registered namespaces
      */
-    public static function autoload($class_name)
+    public function autoload($class_name)
     {
         $parts = explode('\\', $class_name);
-        $ref = &self::$root_namespace;
+        $ref = &$this->root_namespace;
 
         $path = null;
         foreach ($parts as $part)
@@ -208,6 +214,40 @@ final class Autoloader
                 self::$logger->debug("Loaded class {0} from path {1}", [$class_name, $path]);
             else
                 self::$logger->error("File {0} does not contain class {1}", [$path, $class_name]);
+        }
+    }
+
+    public static function findComposerAutoloader()
+    {
+        // Find the Composer Autoloader class using its (generated) name
+        $list = get_declared_classes();
+        foreach ($list as $cl)
+            if (substr($cl, 0, 18) === "ComposerAutoloader")
+                return $cl;
+
+        return null;
+    }
+
+    public function importComposerAutoloaderConfiguration(string $composer_loader_class)
+    {
+        $ref = new ReflectionClass($composer_loader_class);
+        $file = $ref->getFileName();
+
+        $cdir = dirname($file);
+        $psr0 = $cdir . DIRECTORY_SEPARATOR . 'autoloader_psr0.php';
+        if (file_exists($psr0))
+        {
+            $namespaces = include($psr0);
+            foreach ($namespaces as $ns => $path)
+                $this->registerNS($ns, $path, Autoloader::PSR0)
+        }
+
+        $psr4 = $cdir . DIRECTORY_SEPARATOR . 'autoloader_psr4.php';
+        if (file_exists($psr4))
+        {
+            $namespaces = include($psr4);
+            foreach ($namespaces as $ns => $path)
+                $this->registerNS($ns, $path, Autoloader::PSR4)
         }
     }
 }

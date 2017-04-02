@@ -49,41 +49,85 @@ class Resolver
     /**
      * Set up the resolve cache. 
      */
-    public function __construct(string $core_path)
+    public function __construct()
     {
         self::getLogger();
-        $this->modules = array('core' => $core_path);
-        $this->cache = new Cache('resolve');
+        $this->cache = new Cache('wedeto_resolve');
+    }
+
+    public function importComposerAutoloaderConfiguration(string $composer_autoloader_class)
+    {
+        // Find the Composer Autoloader class using its (generated) name
+        $logger = self::getLogger();
+        if ($cl === null)
+        {
+            $logger->error("Could not find Composer Autoloader class - could not deduce vendor path");
+            return;
+        }
+
+        // Find the file the composer autoloader was defined in, and use that
+        // to infer the vendor path and the base path.
+        $ref = new ReflectionClass($cl);
+        $fn = $ref->getFileName();
+        $vendorDir = dirname(dirname($fn));
+        $baseDir = dirname($vendorDir);
+        $class_file = dirname($fn) . DIRECTORY_SEPARATOR . "autoload_psr4.php";
+
+        // Check base directory to be a Wedeto module
+        $modules = array();
+        $base_name = basename($baseDir);
+        if (is_dir($base_dir . '/template') || is_dir($base_dir . '/app') || is_dir($template . '/assets'))
+            $modules[$base_name] = $base_dir;
+
+        // Find all modules
+        $paths = array();
+        foreach (glob($vendorDir . "/*") as $vendor)
+        {
+            if (is_dir($vendor))
+            {
+                $new_modules = self::findModules($module, ucfirst(basename($vendor)));
+                if (count($new_modules))
+                    array_merge($modules, $new_modules);
+            }
+        }
+
+        // Register the modules
+        foreach ($modules as $name => $path)
+            $this->registerModule($name, $path);
+
+        return $modules;
     }
 
     /** 
      * Find installed modules in the module path
      * @param $module_path string Where to look for the modules
      */
-    public function listModules(string $module_path)
+    public static function findModules(string $module_path, $module_name_prefix = "")
     {
         $dirs = glob($module_path . '/*');
 
-        $modules = array('core' => $this->modules['core']);
+        $logger = self::getLogger();
+        $modules = array();
         foreach ($dirs as $dir)
         {
             if (!is_dir($dir))
                 continue;
 
-            $has_lib = is_dir($dir . '/lib');
             $has_template = is_dir($dir . '/template');
             $has_app = is_dir($dir . '/app');
             $has_assets = is_dir($dir . '/assets');
 
-            if (!($has_lib || $has_template || $has_app || $has_assets))
+            if (!($has_template || $has_app || $has_assets))
             {
-                self::$logger->info("Wedeto.Resolve.Resolver", "Path {} does not contain any usable elements", $dir);
+                $logger->info("Path {0} does not contain any usable elements", [$dir]);
                 continue;
             }
             
-            $mod_name = basename($dir);
+            $mod_name = $module_name_prefix . ucfirst(basename($dir));
             $modules[$mod_name] = $dir;
+            $logger->debug("Found module {0} in {1}", [$mod_name, $dir]);
         }
+
         return $modules;
     }
 
