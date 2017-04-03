@@ -38,13 +38,16 @@ class Resolver
     protected $name;
 
     /** The paths to search when resolving */
-    protected $search_path;
+    protected $search_path = array();
 
     /** If the list has been sorted */
     protected $sorted = false;
 
     /** The cache of templates, assets */
     protected $cache = null;
+
+    /** The authorativeness of the cache */
+    protected $authorative = false;
 
     /**
      * Set up the resolve cache. 
@@ -68,6 +71,30 @@ class Resolver
     public function getCache()
     {
         return $this->cache;
+    }
+
+    /**
+     * Set the authorative state. When authorative is enabled, and a file
+     * failed to resolve according to the cache, no attempt is made to resolve
+     * it. This increases performance in production, but can be inconvenient
+     * during development.
+     *
+     * @param bool $authorative The authorative state
+     * @return Resolver Provides fluent interface
+     */
+    public function setAuthorative(bool $authorative)
+    {
+        $this->authorative = $authorative;
+        return $this;
+    }
+
+    /**
+     * @return bool The Authorative state.
+     * @seealso Resolver::setAuthorative
+     */
+    public function getAuthorative()
+    {
+        return $this->authorative;
     }
 
     /**
@@ -95,7 +122,10 @@ class Resolver
      */
     public function getSearchPath()
     {
-        return $this->search_path;
+        $sp = array();
+        foreach ($this->search_path as $name => $info)
+            $sp[$name] = $info['path'];
+        return $sp;
     }
 
     /** 
@@ -120,7 +150,7 @@ class Resolver
     public function resolve(string $file)
     {
         $cached = $this->cache !== null ? $this->cache->get('resolve', $this->name, $file) : null;
-        if ($cached === false)
+        if ($cached === false && $this->authorative)
             return null;
 
         if (!empty($cached))

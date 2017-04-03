@@ -84,5 +84,105 @@ final class ResolverTest extends TestCase
 
         $result = $resolver->resolve('files/foo/test2.css');
         $this->assertEquals($root . '/module3/files/foo/test2.css', $result);
+
+        $sp = $resolver->getSearchPath();
+        $this->assertEquals([
+            'mod1' => $root . '/module1',
+            'mod2' => $root . '/module2',
+            'mod3' => $root . '/module3'
+        ], $sp);
+
+        $resolver->clearSearchPath();
+        $sp = $resolver->getSearchPath();
+        $this->assertEmpty($sp);
+    }
+
+    public function testResolveCacheHits()
+    {
+        $root = $this->dir;
+        mkdir($root . '/module1/files/foo', 0770, true);
+
+        touch($root . '/module1/files/foo/test1.css');
+        touch($root . '/module1/files/foo/test2.css');
+
+        $resolver = new Resolver('css');
+        $cache = new Cache('wedeto-resolve');
+        $resolver->setCache($cache);
+        $this->assertEquals($cache, $resolver->getCache());
+
+        // Add the module path
+        $resolver->addToSearchPath('mod1', $root . '/module1', 1);
+
+        // Test resolving files not in cache
+        $result = $resolver->resolve('files/foo/test1.css');
+        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
+
+        $result = $resolver->resolve('files/foo/test2.css');
+        $this->assertEquals($root . '/module1/files/foo/test2.css', $result);
+
+        // Remove a cached file
+        unlink($root . '/module1/files/foo/test2.css');
+
+        // Test resolving cached file that still exists
+        $result = $resolver->resolve('files/foo/test1.css');
+        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
+
+        // Test resolving cached file that does not exist anymore
+        $result = $resolver->resolve('files/foo/test2.css');
+        $this->assertNull($result);
+
+        // Re-create it, it should be found again
+        touch($root . '/module1/files/foo/test2.css');
+        $result = $resolver->resolve('files/foo/test2.css');
+        $this->assertEquals($root . '/module1/files/foo/test2.css', $result);
+    }
+
+    public function testResolveWithAuthorativeCache()
+    {
+        $root = $this->dir;
+        mkdir($root . '/module1/files/foo', 0770, true);
+
+        touch($root . '/module1/files/foo/test1.css');
+        touch($root . '/module1/files/foo/test2.css');
+
+        $resolver = new Resolver('css');
+        $cache = new Cache('wedeto-resolve');
+        $resolver->setCache($cache);
+        $this->assertEquals($cache, $resolver->getCache());
+
+        $this->assertFalse($resolver->getAuthorative());
+        $resolver->setAuthorative(true);
+        $this->assertTrue($resolver->getAuthorative());
+
+        // Add the module path
+        $resolver->addToSearchPath('mod1', $root . '/module1', 1);
+
+        // Test resolving files not in cache
+        $result = $resolver->resolve('files/foo/test1.css');
+        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
+
+        $result = $resolver->resolve('files/foo/test2.css');
+        $this->assertEquals($root . '/module1/files/foo/test2.css', $result);
+
+        // Remove a cached file
+        unlink($root . '/module1/files/foo/test2.css');
+
+        // Test resolving cached file that still exists
+        $result = $resolver->resolve('files/foo/test1.css');
+        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
+
+        // Test resolving cached file that does not exist anymore
+        $result = $resolver->resolve('files/foo/test2.css');
+        $this->assertNull($result);
+
+        // Re-create it, it should not be found again
+        touch($root . '/module1/files/foo/test2.css');
+        $result = $resolver->resolve('files/foo/test2.css');
+        $this->assertNull($result);
+
+        // Create a file that was not cached so far, it should be picked up
+        touch($root . '/module1/files/foo/test3.css');
+        $result = $resolver->resolve('files/foo/test3.css');
+        $this->assertEquals($root . '/module1/files/foo/test3.css', $result);
     }
 }

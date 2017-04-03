@@ -28,14 +28,22 @@ namespace Wedeto\Resolve;
 use Serializable;
 
 use Wedeto\Util\Cache;
+use Wedeto\Util\LoggerAwareStaticTrait;
 
 class Router implements Serializable
 {
+    use LoggerAwareStaticTrait;
+
     /** The root route node */
     protected $root = null;
 
     /** The list of installed modules */
     protected $modules = array();
+
+    public function __construct()
+    {
+        self::getLogger();
+    }
 
     /** 
      * Replace the entire list of modules.
@@ -108,15 +116,14 @@ class Router implements Serializable
             $retry = false; // No need to retry, we just located all modules
         }
 
-        $routes = $this->getRoutes();
-        $route = $routes->resolve($parts, $ext);
+        $route = $this->root->resolve($parts, $ext);
 
         if (!empty($route) && $retry && !file_exists($route['path']))
         {
             // A non-existing file was found in the cache - flush the cache,
             // but do this only once.
-            $this->cache->clear();
-            return $this->app($request, false);
+            $this->clearCache();
+            return $this->resolve($request, false);
         }
 
         if ($route === null)
@@ -135,7 +142,7 @@ class Router implements Serializable
      * @param $recursive boolean Whether to also scan subdirectories
      * @return array The contents of the directory.
      */
-    private static function listDir(string $dir, bool $recursive = true)
+    public static function listDir(string $dir, bool $recursive = true)
     {
         $contents = array();
         $subdirs = array();
@@ -195,7 +202,7 @@ class Router implements Serializable
             {
                 $file = str_replace($app_path, "", $path);
                 $parts = array_filter(explode("/", $file));
-                $ptr = $routes;
+                $ptr = $this->root;
 
                 $cnt = 0;
                 $l = count($parts);
@@ -256,12 +263,13 @@ class Router implements Serializable
     public function serialize()
     {
         return serialize(array(
-            'root' => $this->root
+            'root' => $this->root,
+            'modules' => $this->modules
         ));
     }
 
     /**
-     * Unseralize the PHP serialzed data
+     * Unseralize the PHP serialized data
      *
      * @param string $data The PHP Serialized data
      */
@@ -269,5 +277,6 @@ class Router implements Serializable
     {
         $data = unserialize($data);
         $this->root = $data['root'];
+        $this->modules = $data['modules'];
     }
 }
