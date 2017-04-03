@@ -428,13 +428,16 @@ CODE;
         $a->autoload('My2\\NS2_Baz');
         $this->assertTrue(class_exists('My2\\NS2_Baz', false));
 
+        // Attempt to load non-existing class
+        $this->assertFalse(interface_exists('My2\\NS\\FooIFace', false));
+        $a->autoload('My2\\NS\\FooIFace');
+        $this->assertFalse(interface_exists('My2\\NS\\FooIFace', false));
+
+        // Authorative mode is disabled, so after creating the class, it should be loaded
         $this->writeClass($root . '/vendor3/src/FooIFace.php', 'My2\\NS\\FooIFace', 'interface');
-        $this->assertFalse(class_exists('My2\\NS\\FooIFace', false));
         $a->autoload('My2\\NS\\FooIFace');
         $this->assertTrue(interface_exists('My2\\NS\\FooIFace'));
-
     }
-
 
     public function testAutoloadWithAuthorativeEnabled()
     {
@@ -462,12 +465,143 @@ CODE;
         $a->autoload('My3\\NS\\Sub\\Bar');
         $this->assertTrue(class_exists('My3\\NS\\Sub\\Bar', false));
 
-        $a->autoload('My3\\NS\\Sub\\Bar');
-        $this->assertTrue(class_exists('My3\\NS\\Sub\\Bar', false));
-
-        $this->writeClass($root . '/vendor5/src/FooIFace.php', 'My3\\NS\\FooIFace', 'interface');
+        // Attempt to load non-existing interface
         $this->assertFalse(class_exists('My3\\NS\\FooIFace', false));
         $a->autoload('My3\\NS\\FooIFace');
         $this->assertFalse(interface_exists('My3\\NS\\FooIFace'));
+
+        // Failure should be cached now, so creating the class will not work
+        $this->writeClass($root . '/vendor5/src/FooIFace.php', 'My3\\NS\\FooIFace', 'interface');
+        $a->autoload('My3\\NS\\FooIFace');
+        $this->assertFalse(interface_exists('My3\\NS\\FooIFace'));
+    }
+
+    public function testAutoloadWithAuthorativeEnabledAfterBuildCache()
+    {
+        $cache = new Cache('Autoloader-test'); 
+        $root = $this->dir;
+
+        mkdir($root . '/vendor6/src', 0777, true);
+        mkdir($root . '/vendor6/src/Sub', 0777, true);
+
+        $this->writeClass($root . '/vendor6/src/Foo.php', 'My4\\NS\\Foo');
+        $this->writeClass($root . '/vendor6/src/Sub/Bar.php', 'My4\\NS\\Sub\\Bar');
+
+        $a = new Autoloader;
+        $a->setCache($cache);
+        $this->assertFalse($a->getAuthorative());
+        $a->setAuthorative(true);
+        $this->assertTrue($a->getAuthorative());
+        $a->registerNS('My4\\NS\\', $root . '/vendor6/src');
+
+        // Build the cache
+        $a->buildCache();
+
+        // Now create another interface. Will not be present in cache
+        $this->writeClass($root . '/vendor6/src/FooIFace.php', 'My4\\NS\\FooIFace', 'interface');
+
+        // Test classes existing when the cache was built
+        $this->assertFalse(class_exists('My4\\NS\\Foo', false));
+        $a->autoload('My4\\NS\\Foo');
+        $this->assertTrue(class_exists('My4\\NS\\Foo', false));
+
+        $this->assertFalse(class_exists('My4\\NS\\Sub\\Bar', false));
+        $a->autoload('My4\\NS\\Sub\\Bar');
+        $this->assertTrue(class_exists('My4\\NS\\Sub\\Bar', false));
+
+        // The interface was created after the cache, so it should not be loaded
+        $this->assertFalse(class_exists('My4\\NS\\FooIFace', false));
+        $a->autoload('My4\\NS\\FooIFace');
+        $this->assertFalse(interface_exists('My4\\NS\\FooIFace'));
+
+        // A rebuild of the cache should help there
+        $a->buildCache();
+        $a->autoload('My4\\NS\\FooIFace');
+        $this->assertTrue(interface_exists('My4\\NS\\FooIFace'));
+    }
+
+    public function testAutoloadWithExistingClass()
+    {
+        $a = new Autoloader;
+        $a->autoload(static::class);
+        $this->assertTrue(class_exists(static::class));
+    }
+
+    public function testAutoloadWithTraitInterfaceAndClass()
+    {
+        $root = $this->dir;
+
+        mkdir($root . '/vendor7/src', 0777, true);
+        mkdir($root . '/vendor7/src/Sub', 0777, true);
+
+        $this->writeClass($root . '/vendor7/src/Foo.php', 'My5\\NS\\Foo', "class");
+        $this->writeClass($root . '/vendor7/src/Bar.php', 'My5\\NS\\Bar', "trait");
+        $this->writeClass($root . '/vendor7/src/Baz.php', 'My5\\NS\\Baz', "interface");
+
+        // Incorrectly names class
+        $this->writeClass($root . '/vendor7/src/Boobaz.php', 'My5\\NS\\BarBaz', "class");
+
+        $a = new Autoloader;
+        $a->registerNS('My5\\NS\\', $root . '/vendor7/src');
+
+        // Test classes existing when the cache was built
+        $this->assertFalse(class_exists('My5\\NS\\Foo', false));
+        $a->autoload('My5\\NS\\Foo');
+        $this->assertTrue(class_exists('My5\\NS\\Foo', false));
+
+        $this->assertFalse(trait_exists('My5\\NS\\Bar', false));
+        $a->autoload('My5\\NS\\Bar');
+        $this->assertTrue(trait_exists('My5\\NS\\Bar', false));
+
+        $this->assertFalse(interface_exists('My5\\NS\\Baz', false));
+        $a->autoload('My5\\NS\\Baz');
+        $this->assertTrue(interface_exists('My5\\NS\\Baz', false));
+        
+        // Check loading incorrectly named file
+        $this->assertFalse(class_exists('My5\\NS\\Boobaz', false));
+        $a->autoload('My5\\NS\\Boobaz');
+        $this->assertFalse(class_exists('My5\\NS\\Boobaz', false));
+    }
+
+    public function testAutoloadWithCustomAutoloader()
+    {
+        $root = $this->dir;
+
+        mkdir($root . '/vendor8/src', 0777, true);
+        $fb_path = $root . '/vendor8/src/FooBar.php';
+        $this->writeClass($fb_path, 'My6\\NS\\BarBaz', "class");
+
+        $a = new Autoloader;
+        $a->registerNS('My6\\NS\\', $root . '/vendor8/src', function ($cl) use ($fb_path) {
+            if ($cl === "My6\\NS\\BarBaz")
+                require_once $fb_path;
+        });
+
+        // Test classes existing when the cache was built
+        $this->assertFalse(class_exists('My6\\NS\\BarBaz', false));
+        $a->autoload('My6\\NS\\BarBaz');
+        $this->assertTrue(class_exists('My6\\NS\\BarBaz', false));
+
+        // Test with non-existing class
+        $this->assertFalse(class_exists('My6\\NS\\BooBaz', false));
+        $a->autoload('My6\\NS\\BooBaz');
+        $this->assertFalse(class_exists('My6\\NS\\BooBaz', false));
+    }
+
+    public function testAutoloadWithCustomAutoloaderThrowingExceptions()
+    {
+        $root = $this->dir;
+
+        mkdir($root . '/vendor9/src', 0777, true);
+        $a = new Autoloader;
+        $a->registerNS('My7\\NS\\', $root . '/vendor9/src', function ($cl) {
+            if ($cl === "My7\\NS\\BarBaz")
+                throw new \RuntimeException("Foobarred");
+        });
+
+        // Test classes existing when the cache was built
+        $this->assertFalse(class_exists('My7\\NS\\BarBaz', false));
+        $a->autoload('My7\\NS\\BarBaz');
+        $this->assertFalse(class_exists('My7\\NS\\BarBaz', false));
     }
 }

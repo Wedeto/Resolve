@@ -76,9 +76,10 @@ class Route implements Serializable
         // Ask child routes to resolve the route
         if (isset($this->children[$sub_part]))
         {
-            $route = $this->children[$sub_part]->resolve($parts, $ext);
-            if (!empty($route))
-                return $route;
+            // When a sub route exists, there's not falling back to this level anymore.
+            return $this->children[$sub_part]->resolve($parts, $ext);
+            //if (!empty($route))
+            //    return $route;
         }
 
         // No sub-route, so put the part back in place
@@ -104,7 +105,16 @@ class Route implements Serializable
             $route['ext'] = $ext;
 
         if (!empty($route) && !isset($route['remainder']))
+        {
+            if (!empty($parts))
+            {
+                $last = $parts[count($parts) - 1];
+                if (substr($last, -strlen($ext)) === $ext)
+                    $parts[count($parts) - 1] = substr($last, 0, -strlen($ext));
+            }
+
             $route['remainder'] = $parts;
+        }
 
         // Return the route
         return $route;

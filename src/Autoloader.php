@@ -37,15 +37,13 @@ use Wedeto\Util\DefVal;
  * compatible. Alternatively, you can even provide a custom function to use as
  * a loader for a specific namespace.
  *
- * This class loader can be used in general, however, it is built for the Wedeto
- * platform so that the module loader can register namespaces in a predictable
- * manner. It therefore prepends itself upon load to the autoloader queue,
- * rather than appending.
+ * The class loader supports authorative mode - in this case it will trust the cache.
+ * A cache instance is required for this mode. Each resolved class will be 
  */
 final class Autoloader
 {
-    const PSR0 = 0;
-    const PSR4 = 4;
+    const PSR0 = "PSR-0";
+    const PSR4 = "PSR-4";
 
     protected static $logger = null;
     private $cache = null;
@@ -249,15 +247,18 @@ final class Autoloader
      * Build or rebuild the class cache. This will scan all defined PSR4 paths for .php files, 
      * deduce the resulting classname from the path and add the path to the cache.
      *
-     * Note: This works only when solely PSR4 namespaces are defined. There is
+     * This works only when solely PSR4 namespaces are defined. There is
      * ambiguity in the file path -> class name for PSR0-based namespaces as
      * directory separators can be converted to either namespace separators or
      * underscores. To avoid this ambiguity, a exception is thrown when PSR0 namespaces
      * have been registered.
      *
-     * Note: If any of the paths contain files that are not PSR4 compatible, errors may occur,
+     * If any of the paths contain files that are not PSR4 compatible, errors may occur,
      * because the files are not actually loaded to check if they contain the correct class.
      * When two or more files map to the same class name, a LogicException is thrown.
+     *
+     * When authorative mode is enabled, after running buildCache the class loader will only
+     * load classes that were found by buildCache.
      */
     public function buildCache()
     {
@@ -329,33 +330,16 @@ final class Autoloader
         if ($this->cache !== null)
         {
             $cache_built = $this->cache->get('cache_built', new DefVal(false));
-            if ($this->authorative && !$cache_built)
-            {
-                try
-                {
-                    // Disable authorative mode temporarily because build cache
-                    // may trigger autoloading, which will lead to recursion
-                    // with authorativeness enabled.
-                    $this->authorative = false;
-                    $this->buildCache();
-                    $this->authorative = true;
-                }
-                catch (\Throwable $e)
-                {
-                    self::getLogger()->emergency(
-                        'Exception while building cache: {exception}. ' .
-                        'Disabling cache and authorative mode - performance will deteriorate',
-                        ['exception' => $e]
-                    );
-                    $this->cache = null;
-                }
-            }
 
             $path = $this->cache->get('classpaths', $class_name);
-            if (!empty($path))
-                require_once $path;
-            elseif ($this->authorative)
+            if ($this->authorative && ($path === false || ($cache_built && $path === null)))
                 return; // Authorative, no match found, so no loading
+
+            if (!empty($path))
+            {
+                require_once $path;
+                return;
+            }
 
             // No match found, not authorative. Keep looking
         }
@@ -392,29 +376,40 @@ final class Autoloader
                 continue;
 
             require_once $path;
-
+            
+            $exists = class_exists($class_name) || trait_exists($class_name) || interface_exists($class_name);
             if (self::$logger)
             {
-                if (class_exists($class_name, false))
-                {
-                    if (trait_exists($class_name))
-                        self::$logger->debug("Loaded trait {0} from path {1}", [$class_name, $path]);
-                    elseif (interface_exists($class_name))
-                        self::$logger->debug("Loaded interface {0} from path {1}", [$class_name, $path]);
-                    else
-                        self::$logger->debug("Loaded class {0} from path {1}", [$class_name, $path]);
-                    break;
-                }
+                if (trait_exists($class_name))
+                    self::$logger->debug("Loaded trait {0} from path {1}", [$class_name, $path]);
+                elseif (interface_exists($class_name))
+                    self::$logger->debug("Loaded interface {0} from path {1}", [$class_name, $path]);
+                elseif (class_exists($class_name, false))
+                    self::$logger->debug("Loaded class {0} from path {1}", [$class_name, $path]);
                 else
                     self::$logger->error("File {0} does not contain class {1}", [$path, $class_name]);
             }
+
+            // When a class has been loaded, don't loop any further
+            if ($exists)
+                break;
         }
 
         // Cache resolved path
-        if (!empty($path) && $this->cache !== null)
-            $this->cache->put('classpaths', $class_name, $path);
+        if ($this->cache !== null)
+        {
+            if (!empty($path))
+                $this->cache->put('classpaths', $class_name, $path);
+            else // Cache failure
+                $this->cache->put('classpaths', $class_name, false);
+        }
     }
 
+    /**
+     * Find the class name of the Composer autoloader. The name starts
+     * with ComposerAutoloader and has a random suffix. Therefore, the list
+     * of class names is obtained and all class names are compared with this pattern.
+     */
     public static function findComposerAutoloader()
     {
         // Find the Composer Autoloader class using its (generated) name
@@ -429,6 +424,16 @@ final class Autoloader
         // @codeCoverageIgnoreEnd
     }
 
+    /**
+     * Import the configuration from the Composer autoloader, by specifying the
+     * class name of the Composer Autoloader. This is used to locate the
+     * composer folder, which contains files autoload_psr0.ph and/or
+     * autoload_psr4.php which return an array of namespace -> path mappings,
+     * which are then registered in the Wedeto Autoloader.
+     *
+     * @param string $composer_loader_class The fully qualified class name of
+     * the Composer class loader.
+     */
     public function importComposerAutoloaderConfiguration(string $composer_loader_class)
     {
         $ref = new ReflectionClass($composer_loader_class);
@@ -454,9 +459,21 @@ final class Autoloader
         }
     }
 
-    public function getClassLoaders(string $namespace)
+    /**
+     * Get a list of class loaders that may be able to load the specified
+     * class or namespace. The resulting list is ordered so that the most
+     * specific class loader comes first and the most generic comes last.
+     *
+     * @param string $class The fully qualified class (or namespace) to be loaded
+     * @return array A list of loaders, each containing keys: 
+     *               - 'path' where the classes are stored
+     *               - 'std' either Autoloader::PSR0, Autoloader::PSR4 or a callable to be used
+     *                  delegate the autoload task to
+     *               - 'ns' the namespace this loader provides
+     */
+    public function getClassLoaders(string $class)
     {
-        $parts = explode("\\", $namespace);
+        $parts = explode("\\", $class);
         $result = array();
         $ref = &$this->root_namespace;
         $sub_ns = "";
