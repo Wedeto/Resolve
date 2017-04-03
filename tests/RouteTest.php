@@ -146,7 +146,7 @@ final class RouteTest extends TestCase
             'route' => '/foo/bar',
             'ext' => '.json',
             'depth' => 2,
-            'remainder' => ['baz']
+            'remainder' => ['baz.json']
         ], $route);
     }
 
@@ -172,7 +172,7 @@ final class RouteTest extends TestCase
             'route' => '/foo/boo',
             'ext' => '.json',
             'depth' => 2,
-            'remainder' => ['baa']
+            'remainder' => ['baa.json']
         ], $route);
 
         $route = $this->root->resolve(array('foo', 'boo'), '');

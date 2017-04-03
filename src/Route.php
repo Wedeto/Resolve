@@ -27,19 +27,42 @@ namespace Wedeto\Resolve;
 
 use Serializable;
 
+/**
+ * Manage routes discovered by the router. Each app is stored
+ * with it's content type, route and file path.
+ */
 class Route implements Serializable
 {
+    /** The route to this node */
     protected $route;
+
+    /** The depth of this node */
     protected $depth;
+
+    /** The app files linked to this node directly */
     protected $apps = array();
+    
+    /** The child nodes */
     protected $children = array();
 
-    public function __construct(string $route, $depth)
+    /**
+     * Create a route node.
+     * @param string $route The route to get here
+     * @param int $depth The depth of this node.
+     */
+    public function __construct(string $route, int $depth)
     {
         $this->route = $route;
         $this->depth = $depth;
     }
 
+    /**
+     * Link an app to this route.
+     * @param string $path The path to the app
+     * @param string $ext The file extension for this app
+     * @param string $module The module this app belongs to
+     * @return Route Provides fluent interface
+     */
     public function addApp(string $path, $ext, string $module)
     {
         $ext_key = empty($ext) ? '_' : $ext;
@@ -53,8 +76,15 @@ class Route implements Serializable
                 'depth' => $this->depth
             );
         }
+        return $this;
     }
 
+    /**
+     * Get a sub route for the specified route part. If a
+     * child node does not exist yet, it will be created.
+     * @param string $route_part The child route part
+     * @return Route The child node
+     */
     public function getSubRoute(string $route_part)
     {
         $sub_route = $this->route === '/' ? '/' . $route_part : $this->route . '/' . $route_part;
@@ -65,6 +95,19 @@ class Route implements Serializable
         return $this->children[$route_part];
     }
 
+    /**
+     * Find a app for the specified route (or part of it). This method
+     * recursively delegates to the child nodes, until an app is found.
+     *
+     * index.php will match all other route endings. If a child node for a
+     * route part exists, this child becomes responsible, and if it does not
+     * resolve, null is returned, which should be interpreted as a 404 - Not
+     * Found.
+     *
+     * @param array $parts The route parts to resolve
+     * @param string $ext The file extension that may be removed from the route
+     * @return array The resolved route, or null if none was found.
+     */
     public function resolve(array $parts, string $ext)
     {
         $part = array_shift($parts);
@@ -105,21 +148,16 @@ class Route implements Serializable
             $route['ext'] = $ext;
 
         if (!empty($route) && !isset($route['remainder']))
-        {
-            if (!empty($parts))
-            {
-                $last = $parts[count($parts) - 1];
-                if (substr($last, -strlen($ext)) === $ext)
-                    $parts[count($parts) - 1] = substr($last, 0, -strlen($ext));
-            }
-
             $route['remainder'] = $parts;
-        }
 
         // Return the route
         return $route;
     }
 
+    /**
+     * Serialize the route.
+     * @return string data The serialized route
+     */
     public function serialize()
     {
         return serialize([
@@ -130,6 +168,10 @@ class Route implements Serializable
         ]);
     }
 
+    /**
+     * Unserialize the route from serialized PHP data
+     * @param string $data The PHP Serialized data
+     */
     public function unserialize($data)
     {
         $data = unserialize($data);
