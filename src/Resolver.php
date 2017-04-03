@@ -38,7 +38,10 @@ class Resolver
     protected $name;
 
     /** The paths to search when resolving */
-    protected $search_paths;
+    protected $search_path;
+
+    /** If the list has been sorted */
+    protected $sorted = false;
 
     /** The cache of templates, assets */
     protected $cache = null;
@@ -70,12 +73,21 @@ class Resolver
     /**
      * Add a module to the search path of the Resolver.
      *
-     * @param $name string The name of the module. Just for logging purposes.
-     * @param $path string The path of the module.
+     * @param string $name The name of the module. Just for logging purposes.
+     * @param string $path The path of the module.
+     * @param int $precedence The order in which the modules are searched.
+     *                        Lower means searched earlier.
+     * @return Resolver Provides fluent interface
      */
-    public function addToSearchPath(string $name, string $path)
+    public function addToSearchPath(string $name, string $path, int $precedence)
     {
-        $this->search_path[$name] = $path;
+        $this->search_path[$name] = array('path' => $path, 'precedence' => $precedence);
+
+        // Sort the paths so that the highest priority comes first
+        uasort($this->search_path, function ($l, $r) {
+            if ($l['precedence'] !== $r['precedence'])
+                return $l['precedence'] - $r['precedence'];
+        });
     }
 
     /**
@@ -132,12 +144,13 @@ class Resolver
 
         $path = null;
         $found_module = null;
-        $mods = $this->modules;
+        $mods = $this->search_path;
 
-        foreach ($mods as $module => $location)
+        foreach ($mods as $module => $info)
         {
-            self::$logger->debug("Trying path: {0}/{1}/{2}", [$location, $type, $file]);
-            $path = $location . '/' . $type . '/' . $file;
+            $location = $info['path'];
+            self::$logger->debug("Trying {0} path: {1}/{2}", [$location, $this->name, $file]);
+            $path = $location . '/' . $file;
 
             if (file_exists($path) && is_readable($path))
             {
@@ -148,7 +161,7 @@ class Resolver
 
         if ($found_module !== null)
         {
-            self::$logger->debug("Resolved {0} {1} to path {2} (module: {3})", [$type, $file, $path, $found_module]);
+            self::$logger->debug("Resolved {0} {1} to path {2} (module: {3})", [$this->name, $file, $path, $found_module]);
             if ($this->cache !== null)
             {
                 $this->cache->put(
