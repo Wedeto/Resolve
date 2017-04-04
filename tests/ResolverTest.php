@@ -71,6 +71,7 @@ final class ResolverTest extends TestCase
         touch($root . '/module3/files/foo/test2.css');
 
         $resolver = new Resolver('css');
+        $this->assertEquals('css', $resolver->getName());
         $cache = new Cache('wedeto-resolve');
         $resolver->setCache($cache);
         $this->assertEquals($cache, $resolver->getCache());
@@ -95,6 +96,34 @@ final class ResolverTest extends TestCase
         $resolver->clearSearchPath();
         $sp = $resolver->getSearchPath();
         $this->assertEmpty($sp);
+    }
+
+    public function testResolveWithoutCache()
+    {
+        $root = $this->dir;
+        mkdir($root . '/module1/files/foo', 0770, true);
+
+        touch($root . '/module1/files/foo/test1.css');
+        touch($root . '/module1/files/foo/test2.css');
+
+        $resolver = new Resolver('css');
+
+        // Add the module path
+        $resolver->addToSearchPath('mod1', $root . '/module1', 1);
+
+        // Test resolving files not in cache
+        $result = $resolver->resolve('files/foo/test1.css');
+        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
+
+        $result = $resolver->resolve('files/foo/test2.css');
+        $this->assertEquals($root . '/module1/files/foo/test2.css', $result);
+
+        // Resolve them again
+        $result = $resolver->resolve('files/foo/test1.css');
+        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
+
+        $result = $resolver->resolve('files/foo/test2.css');
+        $this->assertEquals($root . '/module1/files/foo/test2.css', $result);
     }
 
     public function testResolveCacheHits()
@@ -184,5 +213,93 @@ final class ResolverTest extends TestCase
         touch($root . '/module1/files/foo/test3.css');
         $result = $resolver->resolve('files/foo/test3.css');
         $this->assertEquals($root . '/module1/files/foo/test3.css', $result);
+    }
+
+    public function testSetPrecedence()
+    {
+        $root = $this->dir;
+        mkdir($root . '/module1/files/foo', 0770, true);
+        mkdir($root . '/module2/files/foo', 0770, true);
+
+        touch($root . '/module1/files/foo/test1.css');
+        touch($root . '/module2/files/foo/test1.css');
+
+        $resolver = new Resolver('css');
+        $cache = new Cache('wedeto-resolve');
+        $resolver->setCache(new Cache('wedeto-resolve'));
+
+        // Add the module path
+        $resolver->addToSearchPath('mod1', $root . '/module1', 1);
+        $resolver->addToSearchPath('mod2', $root . '/module2', 2);
+
+        $this->assertEquals(1, $resolver->getPrecedence('mod1'));
+        $this->assertEquals(2, $resolver->getPrecedence('mod2'));
+        $this->assertEquals($root . '/module1/files/foo/test1.css', $resolver->resolve('files/foo/test1.css'));
+
+        $this->assertInstanceOf(Resolver::class, $resolver->setPrecedence('mod1', 2));
+        $this->assertInstanceOf(Resolver::class, $resolver->setPrecedence('mod2', 1));
+        $resolver->clearCache();
+
+        $this->assertEquals(2, $resolver->getPrecedence('mod1'));
+        $this->assertEquals(1, $resolver->getPrecedence('mod2'));
+        $this->assertEquals($root . '/module2/files/foo/test1.css', $resolver->resolve('files/foo/test1.css'));
+    }
+
+    public function testSetPrecedenceInvalidModule()
+    {
+        $root = $this->dir;
+        mkdir($root . '/module1/files/foo', 0770, true);
+
+        $resolver = new Resolver('css');
+        $resolver->addToSearchPath('mod1', $root . '/module1', 1);
+
+        $resolver->setPrecedence('mod1', 5);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessagE("Unknown module");
+        $resolver->setPrecedence('foo', 1);
+    }
+
+    public function testGetPrecedenceInvalidModule()
+    {
+        $root = $this->dir;
+        mkdir($root . '/module1/files/foo', 0770, true);
+
+        $resolver = new Resolver('css');
+        $resolver->addToSearchPath('mod1', $root . '/module1', 5);
+
+        $this->assertEquals(5, $resolver->getPrecedence('mod1'));
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Unknown module");
+        $resolver->getPrecedence('foo');
+    }
+
+    public function testAddNonExistingSearchPath()
+    {
+        $root = $this->dir;
+        $resolver = new Resolver('test');
+        $this->assertEquals('test', $resolver->getName());
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Path does not exist");
+        $resolver->addToSearchPath('foo', $root . '/bar', 0);
+    }
+
+    public function testSortModules()
+    {
+        $root = $this->dir;
+        mkdir($root . '/module1/files/foo', 0770, true);
+        mkdir($root . '/module2/files/foo', 0770, true);
+
+        $resolver = new Resolver('css');
+        $resolver->addToSearchPath('mod2', $root . '/module2', 0);
+        $resolver->addToSearchPath('mod1', $root . '/module1', 0);
+
+        $path = $resolver->getSearchPath();
+        $this->assertEquals([
+            'mod1' => $root . '/module1',
+            'mod2' => $root . '/module2'
+        ], $path);
+        
     }
 }

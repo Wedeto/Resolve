@@ -48,6 +48,7 @@ final class Autoloader
     protected static $logger = null;
     private $cache = null;
     private $authorative = false;
+    private $registered_namespaces = [];
     private $root_namespace = ['sub_ns' => [], 'loaders' => []];
 
     public static function setLogger(LoggerInterface $logger)
@@ -217,6 +218,8 @@ final class Autoloader
 
         // Get the namespace parts
         $parts = explode('\\', $ns);
+
+        $this->registered_namespaces[$ns] = true;
 
         // Make sure there is a trailing namespace separator
         if ($ns !== "" && substr($ns, -1, 1) !== '\\')
@@ -425,6 +428,22 @@ final class Autoloader
     }
 
     /**
+     * Get the Composer vendor directory, using the Composer autoloader class
+     * name provided.
+     *
+     * @param string $composer_loader_class The fully qualified class name of the Composer autoloader
+     * @return string The vendor dir used by composer
+     */
+    public static function findComposerAutoloaderVendorDir(string $composer_loader_class)
+    {
+        $ref = new \ReflectionClass($composer_loader_class);
+
+        // Composer is located at MyProject/vendor/composer
+        $path = dirname($ref->getFileName());
+        return dirname($path);
+    }
+
+    /**
      * Import the configuration from the Composer autoloader, by specifying the
      * class name of the Composer Autoloader. This is used to locate the
      * composer folder, which contains files autoload_psr0.ph and/or
@@ -434,12 +453,9 @@ final class Autoloader
      * @param string $composer_loader_class The fully qualified class name of
      * the Composer class loader.
      */
-    public function importComposerAutoloaderConfiguration(string $composer_loader_class)
+    public function importComposerAutoloaderConfiguration(string $composer_vendor_dir)
     {
-        $ref = new ReflectionClass($composer_loader_class);
-        $file = $ref->getFileName();
-
-        $cdir = dirname($file);
+        $cdir = $composer_vendor_dir . DIRECTORY_SEPARATOR . 'composer';
         $psr0 = $cdir . DIRECTORY_SEPARATOR . 'autoload_psr0.php';
         if (file_exists($psr0))
         {
@@ -491,5 +507,13 @@ final class Autoloader
         // Reverse the result, because the last one is the most specific
         // namespace, which would be the one to try first.
         return array_reverse($result);
+    }
+
+    /** 
+     * @return array The list of registered namespace
+     */
+    public function getRegisteredNamespaces()
+    {
+        return array_keys($this->registered_namespaces);
     }
 }

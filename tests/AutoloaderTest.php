@@ -33,7 +33,6 @@ use org\bovigo\vfs\vfsStreamDirectory;
 use Wedeto\Util\Cache;
 use Wedeto\Util\Dictionary;
 use Wedeto\Log\Logger;
-use Wedeto\Log\MemLogger;
 
 /**
  * @covers Wedeto\Resolve\Autoloader
@@ -85,6 +84,12 @@ final class AutoloaderTest extends TestCase
 
         $this->assertContains('Foo\\', $ns);
         $this->assertContains('Foo\\Bar\\', $ns);
+
+        $ns = $loader->getRegisteredNamespaces();
+        $this->assertEquals([
+            'Foo\\Bar',
+            'Foo'
+        ], $ns);
     }
 
     public function testBuildCache()
@@ -200,6 +205,11 @@ final class AutoloaderTest extends TestCase
         $loader = new Autoloader;
         $loader_class = Autoloader::findComposerAutoloader();
         $this->assertEquals("ComposerAutoloader", substr($loader_class, 0, 18));
+
+        $refl_class = new \ReflectionClass($loader_class);
+        $expected = dirname(dirname($refl_class->getFileName()));
+        $path = Autoloader::findComposerAutoloaderVendorDir($loader_class);
+        $this->assertEquals($expected, $path);
     }
 
     public function testAutoloaderImport()
@@ -254,10 +264,12 @@ CODE;
         $this->assertTrue(class_exists($autoload_name));
 
         $a = new Autoloader;
-        $a->importComposerAutoloaderConfiguration($autoload_name);
+        $vendorDir = Autoloader::findComposerAutoloaderVendorDir($autoload_name);
+        $a->importComposerAutoloaderConfiguration($vendorDir);
 
         $loaders = $a->getClassLoaders('Foo\\MyClass');
 
+        $this->assertEquals(2, count($loaders));
         foreach ($loaders as $loader)
         {
             $match_psr0 = $loader['path'] = $p0dir1 && $loader['std'] == Autoloader::PSR0 && $loader['ns'] === "Foo\\";

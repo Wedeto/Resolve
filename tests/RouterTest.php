@@ -56,27 +56,28 @@ final class RouterTest extends TestCase
         mkdir($root . '/mod2/app', 0777, true);
 
         $r = new Router;
-        $actual = $r->getModules();
+        $actual = $r->getSearchPath();
         $this->assertEmpty($actual);
 
-        $r->addModule('mod1', $root . '/mod1/app');
-        $r->addModule('mod2', $root . '/mod2/app');
-        $actual = $r->getModules();
+        $r->addToSearchPath('mod1', $root . '/mod1/app', 0);
+        $r->addToSearchPath('mod2', $root . '/mod2/app', 0);
+        $actual = $r->getSearchPath();
         $expected = ['mod1' => $root . '/mod1/app', 'mod2' => $root . '/mod2/app'];
         $this->assertEquals($expected, $actual);
 
-        $r->setModules(['mod1' => $root . '/mod1/app']);
-        $actual = $r->getModules();
+        $r->clearSearchPath();
+        $r->addToSearchPath('mod1', $root . '/mod1/app', 0);
+        $actual = $r->getSearchPath();
         $expected = ['mod1' => $root . '/mod1/app'];
         $this->assertEquals($expected, $actual);
 
-        $r->addModule('mod1', $root . '/mod1/app');
-        $actual = $r->getModules();
+        $r->addToSearchPath('mod1', $root . '/mod1/app', 0);
+        $actual = $r->getSearchPath();
         $this->assertEquals($expected, $actual);
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage("Path does not exist");
-        $r->addModule('mod3', $root . '/mod3/app');
+        $r->addToSearchPath('mod3', $root . '/mod3/app', 0);
     }
 
     public function testRouterListDir()
@@ -103,35 +104,6 @@ final class RouterTest extends TestCase
         $this->assertEquals($expected, $actual);
     }
 
-    public function testSerialize()
-    {
-        $root = $this->dir;
-        mkdir($root . '/mod1/app/sub', 0777, true);
-
-        $mod = $root . '/mod1/app';
-        touch($mod . '/app1.php');
-        touch($mod . '/index.php');
-        touch($mod . '/qwerty.php');
-        touch($mod . '/sub/foo.php');
-        touch($mod . '/sub/bar.php');
-
-        $r = new Router;
-        $r->addModule('mod1', $mod);
-        $routes = $r->getRoutes();
-
-        $data = serialize($r);
-        $clone = unserialize($data);
-
-        $this->assertEquals($r, $clone);
-        
-        $empty_router = new Router;
-        $this->assertNotEquals($empty_router, $clone);
-
-        $clone->clearCache();
-        $clone->setModules([]);
-        $this->assertEquals($empty_router, $clone);
-    }
-
     public function testRouteWithExtension()
     {
         $root = $this->dir;
@@ -147,7 +119,7 @@ final class RouterTest extends TestCase
         touch($mod . '/sub/bar.php');
 
         $r = new Router;
-        $r->addModule('mod1', $mod);
+        $r->addToSearchPath('mod1', $mod, 0);
 
         $route = $r->resolve('/qwerty.json');
         $this->assertEquals($mod . '/qwerty.json.php', $route['path']);
@@ -185,5 +157,37 @@ final class RouterTest extends TestCase
 
         $routes = $r->getRoutes();
         $this->assertInstanceOf(Route::class, $routes);
+    }
+
+    public function testRouterWithCache()
+    {
+        $cache = new Cache('resolve');
+
+        $root = $this->dir;
+        mkdir($root . '/mod1/app', 0777, true);
+        $mod = $root . '/mod1/app';
+        touch($mod . '/app1.php');
+        touch($mod . '/app2.php');
+
+        $router = new Router;
+        $router->setCache($cache);
+        $router->addToSearchPath('mod1', $mod, 0);
+
+        $route = $router->resolve('/app1');
+        $this->assertEquals($mod . '/app1.php', $route['path']);
+
+        $route = $router->resolve('/app2');
+        $this->assertEquals($mod . '/app2.php', $route['path']);
+
+        // Repeat with same cache
+        $router = new Router;
+        $router->setCache($cache);
+        $router->addToSearchPath('mod1', $mod, 0);
+
+        $route = $router->resolve('/app1');
+        $this->assertEquals($mod . '/app1.php', $route['path']);
+
+        $route = $router->resolve('/app2');
+        $this->assertEquals($mod . '/app2.php', $route['path']);
     }
 }

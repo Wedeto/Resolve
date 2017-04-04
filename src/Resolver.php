@@ -40,8 +40,8 @@ class Resolver
     /** The paths to search when resolving */
     protected $search_path = array();
 
-    /** If the list has been sorted */
-    protected $sorted = false;
+    /** If the list has been sorted. Initally empty, so initially sorted */
+    protected $sorted = true;
 
     /** The cache of templates, assets */
     protected $cache = null;
@@ -51,10 +51,21 @@ class Resolver
 
     /**
      * Set up the resolve cache. 
+     *
+     * @param string $name The name of the resolver (Eg type of files resolved)
      */
     public function __construct(string $name)
     {
         self::getLogger();
+        $this->name = $name;
+    }
+
+    /**
+     * @return string the name of the resolver
+     */
+    public function getName()
+    {
+        return $this->name;
     }
 
     /** 
@@ -108,13 +119,57 @@ class Resolver
      */
     public function addToSearchPath(string $name, string $path, int $precedence)
     {
-        $this->search_path[$name] = array('path' => $path, 'precedence' => $precedence);
+        if (!is_dir($path))
+            throw new \InvalidArgumentException("Path does not exist: " . $path);
 
+        $this->search_path[$name] = array('path' => $path, 'precedence' => $precedence);
+        $this->sorted = false;
+        
+        return $this;
+    }
+
+    protected function sortModules()
+    {
         // Sort the paths so that the highest priority comes first
         uasort($this->search_path, function ($l, $r) {
             if ($l['precedence'] !== $r['precedence'])
                 return $l['precedence'] - $r['precedence'];
+            return strcmp($l['path'], $r['path']);
         });
+
+        $this->sorted = true;
+    }
+
+    /** 
+     * Set the precedence value of a module
+     * @param string $name The name of the module
+     * @param int $precedence The precedence value to set
+     * @return Resolver Provides fluent interface
+     */
+    public function setPrecedence(string $name, int $precedence)
+    {
+        if (!isset($this->search_path[$name]))
+            throw new \InvalidArgumentException("Unknown module: " . $name);
+
+        if ($this->search_path[$name]['precedence'] !== $precedence)
+        {
+            $this->search_path[$name]['precedence'] = $precedence;
+            $this->sorted = false;
+        }
+        return $this;
+    }
+
+    /**
+     * Get the precedence value of a module
+     * @param string $name The name of the module
+     * @return int The precedence value
+     */
+    public function getPrecedence(string $name)
+    {
+        if (!isset($this->search_path[$name]))
+            throw new \InvalidArgumentException("Unknown module: " . $name);
+
+        return $this->search_path[$name]['precedence'];
     }
 
     /**
@@ -122,6 +177,9 @@ class Resolver
      */
     public function getSearchPath()
     {
+        if (!$this->sorted)
+            $this->sortModules();
+
         $sp = array();
         foreach ($this->search_path as $name => $info)
             $sp[$name] = $info['path'];
@@ -135,8 +193,39 @@ class Resolver
     public function clearSearchPath()
     {
         $this->search_path = array();
-        if ($this->cache !== null && $this->cache->has('resolve', $this->name))
-            $this->cache->set('resolve', $this->name, array());
+        $this->sorted = false;
+    }
+
+    /**
+     * Clear the cached resolved files
+     * @return Resolver Provides fluent interface
+     */
+    public function clearCache()
+    {
+        if ($this->cache !== null)
+            $this->cache->put('resolve', $this->name, array('data' => [], 'search_path' => $this->search_path));
+        return $this;
+    }
+
+    /**
+     * Obtain the cached data. The cache is cleared when the sort order does not match
+     * the cache.
+     *
+     * @return The cached data
+     */
+    protected function getCachedData()
+    {
+        if ($this->cache === null)
+            return null;
+
+        $sp = $this->cache->get('resolve', $this->name, 'search_path');
+        if ($sp !== null)
+            $sp = $sp->toArray();
+
+        if ($this->search_path !== $sp)
+            $this->clearCache();
+
+        return $this->cache->get('resolve', $this->name);
     }
 
     /**
@@ -149,7 +238,12 @@ class Resolver
      */
     public function resolve(string $file)
     {
-        $cached = $this->cache !== null ? $this->cache->get('resolve', $this->name, $file) : null;
+        if (!$this->sorted)
+            $this->sortModules();
+
+        $cache = $this->getCachedData();
+        $cached = $cache !== null ? $cache->get('data', $file) : null;
+
         if ($cached === false && $this->authorative)
             return null;
 
@@ -192,20 +286,19 @@ class Resolver
         if ($found_module !== null)
         {
             self::$logger->debug("Resolved {0} {1} to path {2} (module: {3})", [$this->name, $file, $path, $found_module]);
-            if ($this->cache !== null)
+            if ($cache !== null)
             {
-                $this->cache->put(
-                    'resolve',
-                    $this->name,
+                $cache->set(
+                    'data',
                     $file, 
                     array("module" => $found_module, "path" => $path)
                 );
             }
             return $path;
         }
-        elseif ($this->cache !== null)
+        elseif ($cache !== null)
         {
-            $this->cache->put('resolve', $this->name, $file, false);
+            $cache->set('data', $file, false);
         }
     
         return null;
