@@ -203,7 +203,7 @@ class Resolver
     public function clearCache()
     {
         if ($this->cache !== null)
-            $this->cache->put('resolve', $this->name, array('data' => [], 'search_path' => $this->search_path));
+            $this->cache->set('resolve', $this->name, array('data' => [], 'search_path' => $this->search_path));
         return $this;
     }
 

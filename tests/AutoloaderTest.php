@@ -33,6 +33,7 @@ use org\bovigo\vfs\vfsStreamDirectory;
 use Wedeto\Util\Cache;
 use Wedeto\Util\Dictionary;
 use Wedeto\Log\Logger;
+use Wedeto\Util\Type;
 
 /**
  * @covers Wedeto\Resolve\Autoloader
@@ -128,21 +129,21 @@ final class AutoloaderTest extends TestCase
         $loader->buildCache();
 
         $paths = $cache->get('classpaths');
-        $this->assertTrue($paths->has('Foo\\Bar\\TestClass11', Dictionary::TYPE_STRING));
-        $this->assertTrue($paths->has('Foo\\Bar\\TestClass12', Dictionary::TYPE_STRING));
-        $this->assertTrue($paths->has('Foo\\Bar\\TestClass13', Dictionary::TYPE_STRING));
+        $this->assertTrue($paths->has('Foo\\Bar\\TestClass11', Type::STRING));
+        $this->assertTrue($paths->has('Foo\\Bar\\TestClass12', Type::STRING));
+        $this->assertTrue($paths->has('Foo\\Bar\\TestClass13', Type::STRING));
 
-        $this->assertTrue($paths->has('Foo\\Baz\\TestClass21', Dictionary::TYPE_STRING));
-        $this->assertTrue($paths->has('Foo\\Baz\\TestClass22', Dictionary::TYPE_STRING));
-        $this->assertTrue($paths->has('Foo\\Baz\\TestClass23', Dictionary::TYPE_STRING));
+        $this->assertTrue($paths->has('Foo\\Baz\\TestClass21', Type::STRING));
+        $this->assertTrue($paths->has('Foo\\Baz\\TestClass22', Type::STRING));
+        $this->assertTrue($paths->has('Foo\\Baz\\TestClass23', Type::STRING));
 
-        $this->assertTrue($paths->has('Foobar\\TestClass31', Dictionary::TYPE_STRING));
-        $this->assertTrue($paths->has('Foobar\\TestClass32', Dictionary::TYPE_STRING));
-        $this->assertTrue($paths->has('Foobar\\TestClass33', Dictionary::TYPE_STRING));
+        $this->assertTrue($paths->has('Foobar\\TestClass31', Type::STRING));
+        $this->assertTrue($paths->has('Foobar\\TestClass32', Type::STRING));
+        $this->assertTrue($paths->has('Foobar\\TestClass33', Type::STRING));
 
-        $this->assertTrue($paths->has('Foobar\\Sub\\TestClass41', Dictionary::TYPE_STRING));
-        $this->assertTrue($paths->has('Foobar\\Sub\\TestClass42', Dictionary::TYPE_STRING));
-        $this->assertTrue($paths->has('Foobar\\Sub\\TestClass43', Dictionary::TYPE_STRING));
+        $this->assertTrue($paths->has('Foobar\\Sub\\TestClass41', Type::STRING));
+        $this->assertTrue($paths->has('Foobar\\Sub\\TestClass42', Type::STRING));
+        $this->assertTrue($paths->has('Foobar\\Sub\\TestClass43', Type::STRING));
     }
 
     public function testBuildCacheDuplicateClasses()

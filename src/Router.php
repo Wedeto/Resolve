@@ -30,8 +30,6 @@ use Wedeto\Util\Cache;
 
 class Router extends Resolver 
 {
-    use LoggerAwareStaticTrait;
-
     /** The root route node */
     protected $root = null;
 

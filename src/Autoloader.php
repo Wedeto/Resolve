@@ -304,7 +304,7 @@ final class Autoloader
                         ));
                     }
 
-                    $this->cache->put('classpaths', $class_name, $file);
+                    $this->cache->set('classpaths', $class_name, $file);
                     ++$class_count;
                 }
                 self::getLogger()->info('Found {0} classes in namespace {1}', [$class_count, $ns]);
@@ -402,9 +402,9 @@ final class Autoloader
         if ($this->cache !== null)
         {
             if (!empty($path))
-                $this->cache->put('classpaths', $class_name, $path);
+                $this->cache->set('classpaths', $class_name, $path);
             else // Cache failure
-                $this->cache->put('classpaths', $class_name, false);
+                $this->cache->set('classpaths', $class_name, false);
         }
     }
 
