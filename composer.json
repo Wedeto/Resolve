@@ -4,12 +4,12 @@
     "description": "Wedeto Platform - Autoloader, template, asset and app resolver",
     "homepage": "https://wedeto.net/",
     "require": {
-        "Wedeto/Util": "@dev",
+        "Wedeto/Util": "0.9.*",
         "php": ">=7.0.0"
     },
     "require-dev": {
         "mikey179/vfsStream": "~1",
-        "Wedeto/Log": "@dev"
+        "Wedeto/Log": "0.9.*"
     },
     "autoload": {
         "psr-4": {
@@ -20,16 +20,6 @@
         {
             "name": "Egbert van der Wal",
             "email": "ewal@pointpro.nl"
-        }
-    ],
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/Wedeto/Util"
-        },
-        {
-            "type": "vcs",
-            "url": "https://github.com/Wedeto/Log"
         }
     ]
 }
