@@ -332,7 +332,7 @@ final class Autoloader
         // Use cache when available
         if ($this->cache !== null)
         {
-            $cache_built = $this->cache->get('cache_built', new DefVal(false));
+            $cache_built = $this->cache->dget('cache_built', false);
 
             $path = $this->cache->get('classpaths', $class_name);
             if ($this->authorative && ($path === false || ($cache_built && $path === null)))
