@@ -180,7 +180,7 @@ final class ResolverTest extends TestCase
         $this->assertEquals($cache, $resolver->getCache());
 
         $this->assertFalse($resolver->getAuthorative());
-        $resolver->setAuthorative(true);
+        $this->assertSame($resolver, $resolver->setAuthorative(true));
         $this->assertTrue($resolver->getAuthorative());
 
         // Add the module path
@@ -213,6 +213,17 @@ final class ResolverTest extends TestCase
         touch($root . '/module1/files/foo/test3.css');
         $result = $resolver->resolve('files/foo/test3.css');
         $this->assertEquals($root . '/module1/files/foo/test3.css', $result);
+
+        // Adding a module to the search path should invalidate the cache
+        mkdir($root . '/module2/files/foo', 0770, true);
+        touch($root . '/module2/files/foo/test1.css');
+
+        $result = $resolver->resolve('files/foo/test1.css');
+        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
+
+        $resolver->addToSearchPath('mod2', $root . '/module2', -1);
+        $result = $resolver->resolve('files/foo/test1.css');
+        $this->assertEquals($root . '/module2/files/foo/test1.css', $result);
     }
 
     public function testSetPrecedence()
@@ -301,5 +312,30 @@ final class ResolverTest extends TestCase
             'mod2' => $root . '/module2'
         ], $path);
         
+    }
+
+    public function testRouterWillResolveAfterModificationOfSearchPath()
+    {
+        $root = $this->dir;
+        mkdir($root . '/mod1/files', 0777, true);
+        $mod = $root . '/mod1/files';
+        touch($mod . '/foo.css');
+
+        mkdir($root . '/mod2/files', 0777, true);
+        $mod2 = $root . '/mod2/files';
+        touch($mod2 . '/bar.css');
+
+        $resolver = new Resolver('css');
+        $resolver->addToSearchPath('mod1', $mod, 0);
+
+        $resolved = $resolver->resolve('/foo.css');
+        $this->assertEquals($mod . '/foo.css', $resolved);
+
+        $resolved = $resolver->resolve('/bar.css');
+        $this->assertNull($resolved);
+
+        $resolver->addToSearchPath('mod2', $mod2, 0);
+        $resolved = $resolver->resolve('/bar.css');
+        $this->assertEquals($mod2 . '/bar.css', $resolved);
     }
 }

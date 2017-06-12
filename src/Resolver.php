@@ -241,6 +241,7 @@ class Resolver
         if (!$this->sorted)
             $this->sortModules();
 
+        $file = ltrim($file, '/');
         $cache = $this->getCachedData();
         $cached = $cache !== null ? $cache->get('data', $file) : null;
 

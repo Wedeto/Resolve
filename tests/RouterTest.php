@@ -190,4 +190,26 @@ final class RouterTest extends TestCase
         $route = $router->resolve('/app2');
         $this->assertEquals($mod . '/app2.php', $route['path']);
     }
+
+    public function testRouterWillResolveAfterModificationOfSearchPath()
+    {
+        $root = $this->dir;
+        mkdir($root . '/mod1/app', 0777, true);
+        $mod = $root . '/mod1/app';
+        touch($mod . '/index.php');
+
+        mkdir($root . '/mod2/app', 0777, true);
+        $mod2 = $root . '/mod2/app';
+        touch($mod2 . '/foo.php');
+
+        $router = new Router;
+        $router->addToSearchPath('mod1', $mod, 0);
+
+        $route = $router->resolve('/foo');
+        $this->assertEquals($mod . '/index.php', $route['path']);
+
+        $router->addToSearchPath('mod2', $mod2, 0);
+        $route2 = $router->resolve('/foo');
+        $this->assertEquals($mod2 . '/foo.php', $route2['path']);
+    }
 }

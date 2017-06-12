@@ -33,6 +33,9 @@ class Router extends Resolver
     /** The root route node */
     protected $root = null;
 
+    /** The search path root is based on */
+    protected $root_search_path = null;
+
     public function __construct(string $name = "router")
     {
         parent::__construct($name);
@@ -130,6 +133,20 @@ class Router extends Resolver
     }
 
     /**
+     * Sort the modules, check if anything has changed
+     */
+    protected function sortModules()
+    {
+        parent::sortModules();
+
+        if ($this->root !== null && $this->root_search_path !== $this->search_path)
+        {
+            $this->root = null;
+            $this->root_search_path = null;
+        }
+    }
+
+    /**
      * Get all routes available from all modules. If the routes have already been
      * determined, they will be used. Clear the cache to redo this.
      *
@@ -146,13 +163,17 @@ class Router extends Resolver
         {
             $root = $cache->get('data');
             if ($root instanceof Route)
+            {
                 $this->root = $root;
+                $this->root_search_path = $cache->get('search_path');
+            }
         }
 
         if ($this->root !== null)
             return $this->root;
         
         $this->root = new Route('/', 0);
+        $this->root_search_path = $this->search_path;
         foreach ($this->search_path as $module => $info)
         {
             $app_path = $info['path'];
