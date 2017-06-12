@@ -70,8 +70,7 @@ class Manager
 
         $this->resolvers[$type] = [
             'path' => $path,
-            'resolver' => new Resolver($type),
-            "extension" => $extension
+            'resolver' => new Resolver($type, $extension)
         ];
 
         if ($this->cache)
@@ -133,13 +132,6 @@ class Manager
     {
         if (!isset($this->resolvers[$type]))
             throw new \InvalidArgumentException("Unknown resolver type: " . $type);
-
-        $ext = $this->resolvers[$type]['extension'];
-        if (!empty($ext))
-        {
-            if (substr($reference, -strlen($ext)) !== $ext)
-                $reference .= $ext;
-        }
 
         return $this->resolvers[$type]['resolver']->resolve($reference);
     }

@@ -37,6 +37,9 @@ class Resolver
     /** The name to identify the type of files resolved. Also used in the cache as identifier key */
     protected $name;
 
+    /** A mandatory suffix - if this is not present on resolved files it will be added */
+    protected $ext;
+
     /** The paths to search when resolving */
     protected $search_path = array();
 
@@ -54,10 +57,11 @@ class Resolver
      *
      * @param string $name The name of the resolver (Eg type of files resolved)
      */
-    public function __construct(string $name)
+    public function __construct(string $name, string $ext = null)
     {
         self::getLogger();
         $this->name = $name;
+        $this->ext = $ext;
     }
 
     /**
@@ -242,6 +246,9 @@ class Resolver
             $this->sortModules();
 
         $file = ltrim($file, '/');
+        if ($this->ext !== null && substr($file, -strlen($this->ext)) !== $this->ext)
+            $file .= $this->ext;
+
         $cache = $this->getCachedData();
         $cached = $cache !== null ? $cache->get('data', $file) : null;
 
