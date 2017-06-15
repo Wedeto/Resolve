@@ -4,17 +4,20 @@
     "description": "Wedeto Platform - Autoloader, template, asset and app resolver",
     "homepage": "https://wedeto.net/",
     "require": {
-        "Wedeto/Util": "0.9.*",
+        "Wedeto/Util": ">=0.9.9",
         "php": ">=7.0.0"
     },
     "require-dev": {
         "mikey179/vfsStream": "~1",
-        "Wedeto/Log": "0.9.*"
+        "Wedeto/Log": ">=0.9.0"
     },
     "autoload": {
         "psr-4": {
             "Wedeto\\Resolve\\": "src/"
         }
+    },
+    "archive": {
+        "exclude": ["/tests","/phpunit.xml"]
     },
     "authors": [
         {
