@@ -45,6 +45,9 @@ class Manager
 
     /** The authorative mode */
     protected $authoritive = false;
+
+    /** The name of the main module */
+    protected $main_module = "main";
     
     /** 
      * Set up the manager.
@@ -172,6 +175,9 @@ class Manager
      */
     public function registerModule(string $module, string $path, int $precedence)
     {
+        // Normalize the module name: lowercased, with dots
+        $module = strtolower(preg_replace('/([\.\\/\\\\])/', '.', $module));
+
         $found_elements = array();
         foreach ($this->resolvers as $type => $resolver)
         {
@@ -257,10 +263,27 @@ class Manager
      */
     public function autoConfigureFromComposer(string $vendor_dir)
     {
-        $base_dir = dirname($vendor_dir);
+        $main_dir = dirname($vendor_dir);
 
-        // Attempt to add the base module
-        $this->registerModule("base", $base_dir, 0);
+        // Add the main module
+        $this->main_module = "main";
+        $package = $main_dir . DIRECTORY_SEPARATOR . "composer.json";
+
+        if (file_exists($package))
+        {
+            // A compose.json file should exist for a composer project,
+            // so read the module name from that.
+            $json = @file_get_contents($package);
+            if ($contents)
+            {
+                $js = @json_decode($json);
+                if (isset($js['name']))
+                    $this->main_module = $js['name'];
+            }
+        }
+
+        // Register the main module with the highest precedence
+        $this->registerModule($this->main_module, $main_dir, 0);
 
         $modules = $this->findModules($vendor_dir, "", 1);
         ksort($modules);
@@ -279,7 +302,7 @@ class Manager
      * @param string $module_name_prefix The prefix for the generated module names
      * @param int $depth The depth at which to look for modules
      */
-    public function findModules(string $path, string $module_name_prefix, int $depth)
+    public static function findModules(string $path, string $module_name_prefix, int $depth)
     {
         if (!is_dir($path))
             throw new \InvalidArgumentException("Not a path: $path");
@@ -300,7 +323,7 @@ class Manager
             $module_name = $module_name_prefix . $dirname;
             if ($depth > 0)
             {
-                $sub_modules = $this->findModules($mod_path, $module_name, $depth - 1);
+                $sub_modules = self::findModules($mod_path, $module_name . '.', $depth - 1);
                 $modules = array_merge($modules, $sub_modules);
             }
             else
