@@ -26,7 +26,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 namespace Wedeto\Resolve;
 
 use PHPUnit\Framework\TestCase;
-
 use org\bovigo\vfs\vfsStream;
 use org\bovigo\vfs\vfsStreamWrapper;
 use org\bovigo\vfs\vfsStreamDirectory;
@@ -39,6 +38,7 @@ use Wedeto\Util\Cache;
 final class ResolverTest extends TestCase
 {
     private $dir;
+    private $cache;
 
     public function setUp()
     {
@@ -47,295 +47,267 @@ final class ResolverTest extends TestCase
         vfsStreamWrapper::setRoot(new vfsStreamDirectory('cachedir'));
         $this->dir = vfsStream::url('cachedir');
         Cache::setCachePath($this->dir);
+        $this->cache = new Cache('resolve');
     }
 
     public function testResolver()
     {
-        $root = $this->dir;
-        mkdir($root . '/module1/files/foo', 0770, true);
-        mkdir($root . '/module1/files/bar', 0770, true);
+        $mgr = new Resolver($this->cache);
+        
+        $res = $mgr->getResolvers();
+        $this->assertEmpty($res);
 
-        mkdir($root . '/module2/files/foo', 0770, true);
-        mkdir($root . '/module2/files/bar', 0770, true);
+        $mgr->addResolverType("assets", "assets");
+        $rlv = $mgr->getResolver('assets');
+        $this->assertInstanceOf(SubResolver::class, $rlv);
 
-        mkdir($root . '/module3/files/foo', 0770, true);
+        $thrown = false;
+        try
+        {
+            $mgr->addResolverType("assets", "assets");
+        }
+        catch (\LogicException $e)
+        {
+            $this->assertEquals("Duplicate resolver type: assets", $e->getMessage());
+            $thrown = true;
+        }
+        $this->assertTrue($thrown);
 
-        touch($root . '/module1/files/foo/test1.css');
-        touch($root . '/module1/files/foo/test2.css');
-        touch($root . '/module1/files/bar/test3.css');
-
-        touch($root . '/module2/files/foo/test2.css');
-        touch($root . '/module2/files/bar/test3.css');
-        touch($root . '/module2/files/bar/test4.css');
-
-        touch($root . '/module3/files/foo/test2.css');
-
-        $resolver = new Resolver('css');
-        $this->assertEquals('css', $resolver->getName());
-        $cache = new Cache('wedeto-resolve');
-        $resolver->setCache($cache);
-        $this->assertEquals($cache, $resolver->getCache());
-
-        $resolver->addToSearchPath('mod1', $root . '/module1', 1);
-        $resolver->addToSearchPath('mod2', $root . '/module2', 2);
-        $resolver->addToSearchPath('mod3', $root . '/module3', 0);
-
-        $result = $resolver->resolve('files/foo/test1.css');
-        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
-
-        $result = $resolver->resolve('files/foo/test2.css');
-        $this->assertEquals($root . '/module3/files/foo/test2.css', $result);
-
-        $sp = $resolver->getSearchPath();
-        $this->assertEquals([
-            'mod1' => $root . '/module1',
-            'mod2' => $root . '/module2',
-            'mod3' => $root . '/module3'
-        ], $sp);
-
-        $resolver->clearSearchPath();
-        $sp = $resolver->getSearchPath();
-        $this->assertEmpty($sp);
+        $res = $mgr->getResolvers();
+        $this->assertEquals(1, count($res));
+        $this->assertEquals($rlv, $res['assets']);
     }
 
-    public function testResolveWithoutCache()
+    public function testInvalidName()
     {
-        $root = $this->dir;
-        mkdir($root . '/module1/files/foo', 0770, true);
+        $mgr = new Resolver($this->cache);
 
-        touch($root . '/module1/files/foo/test1.css');
-        touch($root . '/module1/files/foo/test2.css');
+        $thrown = false;
+        try
+        {
+            $t = $mgr->getResolver("foo");
+        }
+        catch (\InvalidArgumentException $e)
+        {
+            $this->assertEquals("Unknown resolver type: foo", $e->getMessage());
+            $thrown = true;
+        }
+        $this->assertTrue($thrown);
 
-        $resolver = new Resolver('css');
+        $thrown = false;
+        $res = new SubResolver('foo');
+        try
+        {
+            $t = $mgr->setResolver("foo", $res);
+        }
+        catch (\InvalidArgumentException $e)
+        {
+            $this->assertEquals("Unknown resolver type: foo", $e->getMessage());
+            $thrown = true;
+        }
+        $this->assertTrue($thrown);
 
-        // Add the module path
-        $resolver->addToSearchPath('mod1', $root . '/module1', 1);
-
-        // Test resolving files not in cache
-        $result = $resolver->resolve('files/foo/test1.css');
-        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
-
-        $result = $resolver->resolve('files/foo/test2.css');
-        $this->assertEquals($root . '/module1/files/foo/test2.css', $result);
-
-        // Resolve them again
-        $result = $resolver->resolve('files/foo/test1.css');
-        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
-
-        $result = $resolver->resolve('files/foo/test2.css');
-        $this->assertEquals($root . '/module1/files/foo/test2.css', $result);
+        $thrown = false;
+        try
+        {
+            $t = $mgr->resolve('foo', 'bar');
+        }
+        catch (\InvalidArgumentException $e)
+        {
+            $this->assertEquals("Unknown resolver type: foo", $e->getMessage());
+            $thrown = true;
+        }
+        $this->assertTrue($thrown);
     }
 
-    public function testResolveCacheHits()
+    public function testAuthorative()
     {
-        $root = $this->dir;
-        mkdir($root . '/module1/files/foo', 0770, true);
+        $mgr = new Resolver($this->cache);
 
-        touch($root . '/module1/files/foo/test1.css');
-        touch($root . '/module1/files/foo/test2.css');
+        $mgr->addResolverType('router', 'router');
+        $mgr->setResolver('router', new Router);
+        $mgr->addResolverType('assets', 'assets');
+        $mgr->addResolverType('template', 'template');
 
-        $resolver = new Resolver('css');
-        $cache = new Cache('wedeto-resolve');
-        $resolver->setCache($cache);
-        $this->assertEquals($cache, $resolver->getCache());
+        $resolvers = $mgr->getResolvers();
+        $this->assertEquals(3, count($resolvers));
+        foreach ($resolvers as $res)
+            $this->assertFalse($res->getAuthorative());
 
-        // Add the module path
-        $resolver->addToSearchPath('mod1', $root . '/module1', 1);
+        $this->assertInstanceOf(Resolver::class, $mgr->setAuthorative(true));
+        $this->assertTrue($mgr->getAuthorative());
+        $resolvers = $mgr->getResolvers();
+        $this->assertEquals(3, count($resolvers));
+        foreach ($resolvers as $res)
+            $this->assertTrue($res->getAuthorative());
 
-        // Test resolving files not in cache
-        $result = $resolver->resolve('files/foo/test1.css');
-        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
-
-        $result = $resolver->resolve('files/foo/test2.css');
-        $this->assertEquals($root . '/module1/files/foo/test2.css', $result);
-
-        // Remove a cached file
-        unlink($root . '/module1/files/foo/test2.css');
-
-        // Test resolving cached file that still exists
-        $result = $resolver->resolve('files/foo/test1.css');
-        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
-
-        // Test resolving cached file that does not exist anymore
-        $result = $resolver->resolve('files/foo/test2.css');
-        $this->assertNull($result);
-
-        // Re-create it, it should be found again
-        touch($root . '/module1/files/foo/test2.css');
-        $result = $resolver->resolve('files/foo/test2.css');
-        $this->assertEquals($root . '/module1/files/foo/test2.css', $result);
-    }
-
-    public function testResolveWithAuthorativeCache()
-    {
-        $root = $this->dir;
-        mkdir($root . '/module1/files/foo', 0770, true);
-
-        touch($root . '/module1/files/foo/test1.css');
-        touch($root . '/module1/files/foo/test2.css');
-
-        $resolver = new Resolver('css');
-        $cache = new Cache('wedeto-resolve');
-        $resolver->setCache($cache);
-        $this->assertEquals($cache, $resolver->getCache());
-
-        $this->assertFalse($resolver->getAuthorative());
-        $this->assertSame($resolver, $resolver->setAuthorative(true));
-        $this->assertTrue($resolver->getAuthorative());
-
-        // Add the module path
-        $resolver->addToSearchPath('mod1', $root . '/module1', 1);
-
-        // Test resolving files not in cache
-        $result = $resolver->resolve('files/foo/test1.css');
-        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
-
-        $result = $resolver->resolve('files/foo/test2.css');
-        $this->assertEquals($root . '/module1/files/foo/test2.css', $result);
-
-        // Remove a cached file
-        unlink($root . '/module1/files/foo/test2.css');
-
-        // Test resolving cached file that still exists
-        $result = $resolver->resolve('files/foo/test1.css');
-        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
-
-        // Test resolving cached file that does not exist anymore
-        $result = $resolver->resolve('files/foo/test2.css');
-        $this->assertNull($result);
-
-        // Re-create it, it should not be found again
-        touch($root . '/module1/files/foo/test2.css');
-        $result = $resolver->resolve('files/foo/test2.css');
-        $this->assertNull($result);
-
-        // Create a file that was not cached so far, it should be picked up
-        touch($root . '/module1/files/foo/test3.css');
-        $result = $resolver->resolve('files/foo/test3.css');
-        $this->assertEquals($root . '/module1/files/foo/test3.css', $result);
-
-        // Adding a module to the search path should invalidate the cache
-        mkdir($root . '/module2/files/foo', 0770, true);
-        touch($root . '/module2/files/foo/test1.css');
-
-        $result = $resolver->resolve('files/foo/test1.css');
-        $this->assertEquals($root . '/module1/files/foo/test1.css', $result);
-
-        $resolver->addToSearchPath('mod2', $root . '/module2', -1);
-        $result = $resolver->resolve('files/foo/test1.css');
-        $this->assertEquals($root . '/module2/files/foo/test1.css', $result);
+        $this->assertInstanceOf(Resolver::class, $mgr->setAuthorative(false));
+        $this->assertFalse($mgr->getAuthorative());
+        $resolvers = $mgr->getResolvers();
+        $this->assertEquals(3, count($resolvers));
+        foreach ($resolvers as $res)
+            $this->assertFalse($res->getAuthorative());
     }
 
     public function testSetPrecedence()
     {
         $root = $this->dir;
-        mkdir($root . '/module1/files/foo', 0770, true);
-        mkdir($root . '/module2/files/foo', 0770, true);
 
-        touch($root . '/module1/files/foo/test1.css');
-        touch($root . '/module2/files/foo/test1.css');
+        mkdir($root . '/module1/app', 0777, true);
+        mkdir($root . '/module1/assets', 0777, true);
+        mkdir($root . '/module1/template', 0777, true);
 
-        $resolver = new Resolver('css');
-        $cache = new Cache('wedeto-resolve');
-        $resolver->setCache(new Cache('wedeto-resolve'));
+        mkdir($root . '/module2/app', 0777, true);
+        mkdir($root . '/module2/assets', 0777, true);
+        mkdir($root . '/module2/template', 0777, true);
 
-        // Add the module path
-        $resolver->addToSearchPath('mod1', $root . '/module1', 1);
-        $resolver->addToSearchPath('mod2', $root . '/module2', 2);
+        mkdir($root . '/module3/app', 0777, true);
 
-        $this->assertEquals(1, $resolver->getPrecedence('mod1'));
-        $this->assertEquals(2, $resolver->getPrecedence('mod2'));
-        $this->assertEquals($root . '/module1/files/foo/test1.css', $resolver->resolve('files/foo/test1.css'));
+        touch($root . '/module1/app/app.php');
+        touch($root . '/module1/assets/test.css');
+        touch($root . '/module1/template/tpl.php');
+        touch($root . '/module2/app/app.php');
+        touch($root . '/module2/template/tpl.php');
+        touch($root . '/module3/app/app.php');
 
-        $this->assertInstanceOf(Resolver::class, $resolver->setPrecedence('mod1', 2));
-        $this->assertInstanceOf(Resolver::class, $resolver->setPrecedence('mod2', 1));
-        $resolver->clearCache();
+        $mgr = new Resolver($this->cache);
+        $mgr->addResolverType('router', 'app');
+        $mgr->setResolver('router', new Router);
+        $mgr->addResolverType('assets', 'assets');
+        $mgr->addResolverType('template', 'template');
+        $mgr->registerModule('mod1', $root . '/module1', 1);
+        $mgr->registerModule('mod2', $root . '/module2', 2);
+        $mgr->registerModule('mod3', $root . '/module3', 3);
 
-        $this->assertEquals(2, $resolver->getPrecedence('mod1'));
-        $this->assertEquals(1, $resolver->getPrecedence('mod2'));
-        $this->assertEquals($root . '/module2/files/foo/test1.css', $resolver->resolve('files/foo/test1.css'));
-    }
+        $this->assertEquals($root . '/module1/assets/test.css', $mgr->resolve('assets', 'test.css'));
+        $this->assertEquals($root . '/module1/template/tpl.php', $mgr->resolve('template', 'tpl.php'));
 
-    public function testSetPrecedenceInvalidModule()
-    {
-        $root = $this->dir;
-        mkdir($root . '/module1/files/foo', 0770, true);
+        $route = $mgr->resolve('router', '/app');
+        $this->assertEquals($root . '/module1/app/app.php', $route['path']);
 
-        $resolver = new Resolver('css');
-        $resolver->addToSearchPath('mod1', $root . '/module1', 1);
-
-        $resolver->setPrecedence('mod1', 5);
-
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessagE("Unknown module");
-        $resolver->setPrecedence('foo', 1);
-    }
-
-    public function testGetPrecedenceInvalidModule()
-    {
-        $root = $this->dir;
-        mkdir($root . '/module1/files/foo', 0770, true);
-
-        $resolver = new Resolver('css');
-        $resolver->addToSearchPath('mod1', $root . '/module1', 5);
-
-        $this->assertEquals(5, $resolver->getPrecedence('mod1'));
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage("Unknown module");
-        $resolver->getPrecedence('foo');
-    }
-
-    public function testAddNonExistingSearchPath()
-    {
-        $root = $this->dir;
-        $resolver = new Resolver('test');
-        $this->assertEquals('test', $resolver->getName());
-
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage("Path does not exist");
-        $resolver->addToSearchPath('foo', $root . '/bar', 0);
-    }
-
-    public function testSortModules()
-    {
-        $root = $this->dir;
-        mkdir($root . '/module1/files/foo', 0770, true);
-        mkdir($root . '/module2/files/foo', 0770, true);
-
-        $resolver = new Resolver('css');
-        $resolver->addToSearchPath('mod2', $root . '/module2', 0);
-        $resolver->addToSearchPath('mod1', $root . '/module1', 0);
-
-        $path = $resolver->getSearchPath();
-        $this->assertEquals([
+        $mods = $mgr->getModules();
+        $this->assertTrue([
             'mod1' => $root . '/module1',
-            'mod2' => $root . '/module2'
-        ], $path);
-        
+            'mod2' => $root . '/module2',
+            'mod3' => $root . '/module3'
+        ] === $mods);
+
+        $this->assertInstanceOf(Resolver::class, $mgr->setPrecedence('mod2', 0));
+        $this->assertInstanceOf(Resolver::class, $mgr->setPrecedence('mod3', 5));
+        $this->assertEquals($root . '/module2/template/tpl.php', $mgr->resolve('template', 'tpl.php'));
+
+        $route = $mgr->resolve('router', '/app');
+        $this->assertEquals($root . '/module2/app/app.php', $route['path']);
+
+        $mods = $mgr->getModules();
+        $this->assertTrue([
+            'mod2' => $root . '/module2',
+            'mod1' => $root . '/module1',
+            'mod3' => $root . '/module3'
+        ] === $mods);
+
+        // Set to equal precedence - sorting should be on path name now
+        $this->assertInstanceOf(Resolver::class, $mgr->setPrecedence('mod3', 0));
+        $mods = $mgr->getModules();
+        $this->assertTrue([
+            'mod2' => $root . '/module2',
+            'mod3' => $root . '/module3',
+            'mod1' => $root . '/module1'
+        ] === $mods);
     }
 
-    public function testRouterWillResolveAfterModificationOfSearchPath()
+    public function testWithExtension()
     {
         $root = $this->dir;
-        mkdir($root . '/mod1/files', 0777, true);
-        $mod = $root . '/mod1/files';
-        touch($mod . '/foo.css');
 
-        mkdir($root . '/mod2/files', 0777, true);
-        $mod2 = $root . '/mod2/files';
-        touch($mod2 . '/bar.css');
+        mkdir($root . '/module1/template', 0777, true);
+        touch($root . '/module1/template/tpl.php');
 
-        $resolver = new Resolver('css');
-        $resolver->addToSearchPath('mod1', $mod, 0);
+        $mgr = new Resolver($this->cache);
+        $mgr->addResolverType('template', 'template', '.php');
+        $mgr->registerModule('mod1', $root . '/module1', 1);
 
-        $resolved = $resolver->resolve('/foo.css');
-        $this->assertEquals($mod . '/foo.css', $resolved);
+        $this->assertEquals($root . '/module1/template/tpl.php', $mgr->resolve('template', 'tpl.php'));
+        $this->assertEquals($root . '/module1/template/tpl.php', $mgr->resolve('template', 'tpl'));
+    }
 
-        $resolved = $resolver->resolve('/bar.css');
-        $this->assertNull($resolved);
+    public function testEmptyModule()
+    {
+        $root = $this->dir;
 
-        $resolver->addToSearchPath('mod2', $mod2, 0);
-        $resolved = $resolver->resolve('/bar.css');
-        $this->assertEquals($mod2 . '/bar.css', $resolved);
+        mkdir($root . '/module10', 0777, true);
+        $mgr = new Resolver($this->cache);
+        $mgr->addResolverType('template', 'template', '.php');
+        $mgr->registerModule('mod10', $root . '/module10', 1);
+
+        $resolver = $mgr->getResolver('template');
+        $search_path = $resolver->getSearchPath();
+        $this->assertEmpty($search_path);
+    }
+
+    public function testAutoconfigFromComposer()
+    {
+        $root = $this->dir;
+        $vendor_dir = $root . "/vendor";
+        
+        mkdir($vendor_dir . '/wedeto/mod1/app', 0777, true);
+
+        mkdir($vendor_dir . '/wedeto/mod2/template', 0777, true);
+        mkdir($vendor_dir . '/wedeto/mod2/assets', 0777, true);
+
+        mkdir($vendor_dir . '/wedeto/mod3/assets', 0777, true);
+
+        mkdir($vendor_dir . '/wedeto/mod4/app', 0777, true);
+        mkdir($vendor_dir . '/wedeto/mod4/assets', 0777, true);
+        mkdir($vendor_dir . '/wedeto/mod4/template', 0777, true);
+
+        // Make sure that random files don't trigger anything weird
+        touch($vendor_dir . '/wedeto/foo.bar');
+
+        $mgr = new Resolver;
+        $mgr->addResolverType('template', 'template');
+        $mgr->addResolverType('assets', 'assets');
+        $mgr->addResolverType('router', 'app');
+        $mgr->setResolver('router', new Router);
+        $mgr->autoConfigureFromComposer($vendor_dir);
+
+        $router = $mgr->getResolver('router');
+        $search_path = $router->getSearchPath();
+        $expected = [
+            'wedeto.mod1' => $vendor_dir . '/wedeto/mod1/app',
+            'wedeto.mod4' => $vendor_dir . '/wedeto/mod4/app'
+        ];
+
+        $this->assertEquals($expected, $search_path);
+
+        $assets = $mgr->getResolver('assets');
+        $search_path = $assets->getSearchPath();
+        $expected = [
+            'wedeto.mod2' => $vendor_dir . '/wedeto/mod2/assets',
+            'wedeto.mod3' => $vendor_dir . '/wedeto/mod3/assets',
+            'wedeto.mod4' => $vendor_dir . '/wedeto/mod4/assets'
+        ];
+        $this->assertEquals($expected, $search_path);
+
+        $template = $mgr->getResolver('template');
+        $search_path = $template->getSearchPath();
+        $expected = [
+            'wedeto.mod2' => $vendor_dir . '/wedeto/mod2/template',
+            'wedeto.mod4' => $vendor_dir . '/wedeto/mod4/template'
+        ];
+        $this->assertEquals($expected, $search_path);
+    }
+
+    public function testAutoconfigWithInvalidPath()
+    {
+        $root = $this->dir;
+        $vendor_dir = $root . "/vendor";
+
+        $mgr = new Resolver;
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage("Not a path");
+        $mgr->autoConfigureFromComposer($vendor_dir);
+
     }
 }
+

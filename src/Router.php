@@ -28,7 +28,7 @@ namespace Wedeto\Resolve;
 use Wedeto\Util\LoggerAwareStaticTrait;
 use Wedeto\Util\Cache;
 
-class Router extends Resolver 
+class Router extends SubResolver 
 {
     /** The root route node */
     protected $root = null;
@@ -230,7 +230,7 @@ class Router extends Resolver
 
     /**
      * Clear the cached resolved files
-     * @return Resolver Provides fluent interface
+     * @return Router Provides fluent interface
      */
     public function clearCache()
     {

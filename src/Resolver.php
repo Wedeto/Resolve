@@ -27,85 +27,151 @@ namespace Wedeto\Resolve;
 use Wedeto\Util\LoggerAwareStaticTrait;
 use Wedeto\Util\Cache;
 
-/**
- * Resolve templates assets from registered modules / locations
- */
 class Resolver
 {
     use LoggerAwareStaticTrait;
 
-    /** The name to identify the type of files resolved. Also used in the cache as identifier key */
-    protected $name;
+    /** The cache to store all resolve data */
+    protected $cache;
 
-    /** A mandatory suffix - if this is not present on resolved files it will be added */
-    protected $ext;
-
-    /** The paths to search when resolving */
-    protected $search_path = array();
-
-    /** If the list has been sorted. Initally empty, so initially sorted */
+    /** If the modules are sorted on precedence */
     protected $sorted = true;
 
-    /** The cache of templates, assets */
-    protected $cache = null;
+    /** The modules in use in the manager */
+    protected $modules = array();
 
-    /** The authorativeness of the cache */
-    protected $authorative = false;
+    /** The resolvers */
+    protected $resolvers = array();
 
-    /**
-     * Set up the resolve cache. 
-     *
-     * @param string $name The name of the resolver (Eg type of files resolved)
-     */
-    public function __construct(string $name, string $ext = null)
-    {
-        self::getLogger();
-        $this->name = $name;
-        $this->ext = $ext;
-    }
+    /** The authorative mode */
+    protected $authoritive = false;
 
-    /**
-     * @return string the name of the resolver
-     */
-    public function getName()
-    {
-        return $this->name;
-    }
-
+    /** The name of the main module */
+    protected $main_module = "main";
+    
     /** 
-     * Set a cache used to store located files
+     * Set up the manager.
+     * @param Cache $cache The cache to use for the resolvers.
      */
-    public function setCache(Cache $cache)
+    public function __construct(Cache $cache = null)
     {
         $this->cache = $cache;
     }
 
     /**
-     * Get the cache instance in use
+     * Add a resolver type
+     * @param string $type The resolver type to add
+     * @param string $path The sub-path this resolver looks in in each module
+     * @param string $extension The required extension on resolved elements. If absent from a reference,
+     *                          it will be appended
+     * @param SubResolver $instance A way to pass in a SubResolver instance. When null, a new one will be
+     *                           instantiated. Cannot be used in combination with $extension
+     * @return Resolver Provides fluent interface
      */
-    public function getCache()
+    public function addResolverType(string $type, string $path, string $extension = "", SubResolver $instance = null)
     {
-        return $this->cache;
+        // Check argument validity
+        if (isset($this->resolvers[$type]))
+            throw new \LogicException("Duplicate resolver type: " . $type);
+
+        if ($instance !== null && $extension !== "")
+            throw new \LogicException("Cannot set a file extension for a provided instance");
+
+        // Instantiate a new resolver when none has been passed
+        if ($instance === null)
+            $instance = new SubResolver($type, $extension);
+
+        $this->resolvers[$type] = [
+            'path' => $path,
+            'resolver' => $instance
+        ];
+
+        if ($this->cache)
+            $this->resolvers[$type]['resolver']->setCache($this->cache);
+
+        // Register found modules with the new resolver
+        foreach ($this->modules as $name => $module_path)
+            if (is_dir($module_path . DIRECTORY_SEPARATOR . $path))
+                $instance->addToSearchPath($name, $path);
+
+        return $this;
     }
 
     /**
-     * Set the authorative state. When authorative is enabled, and a file
-     * failed to resolve according to the cache, no attempt is made to resolve
-     * it. This increases performance in production, but can be inconvenient
-     * during development.
-     *
-     * @param bool $authorative The authorative state
+     * Return a resolver instance
+     * @param string $type The resolver type to return
+     * @return Resolver The resolver instance
+     * @throws InvalidArgumentException When the resolver type is unknown
+     */
+    public function getResolver(string $type)
+    {
+        if (!isset($this->resolvers[$type]))
+            throw new \InvalidArgumentException("Unknown resolver type: " . $type);
+        return $this->resolvers[$type]['resolver'];
+    }
+
+    /**
+     * Replace a resolver with a custom instance
+     * @param string $type The resolver to replace
+     * @param SubResolver $resolver The SubResolver instance
      * @return Resolver Provides fluent interface
+     */
+    public function setResolver(string $type, SubResolver $resolver)
+    {
+        if (!isset($this->resolvers[$type]))
+            throw new \InvalidArgumentException("Unknown resolver type: " . $type);
+
+        if ($this->cache !== null)
+            $resolver->setCache($this->cache);
+
+        $this->resolvers[$type]['resolver'] = $resolver;
+        return $this;
+    }
+
+    /**
+     * @return array The list of configured resolvers, with their names as key
+     */
+    public function getResolvers()
+    {
+        $res = [];
+        foreach ($this->resolvers as $name => $resolver)
+            $res[$name] = $resolver['resolver'];
+
+        return $res;
+    }
+
+    /**
+     * Resolve a reference of a specific type
+     * @param string $type The reference type
+     * @param string $reference What to resolve
+     * @return string The resolved element 
+     */
+    public function resolve(string $type, string $reference)
+    {
+        if (!isset($this->resolvers[$type]))
+            throw new \InvalidArgumentException("Unknown resolver type: " . $type);
+
+        return $this->resolvers[$type]['resolver']->resolve($reference);
+    }
+
+    /**
+     * Set the authorativeness of the resolvers
+     * @param bool $authorative Whether the resolvers are authorative or not: whether
+     *                          they trust cached resolve failures or not.
+     *                          This improves performance in production but can be inconvenient
+     *                          in development.
      */
     public function setAuthorative(bool $authorative)
     {
+        foreach ($this->resolvers as $resolver)
+            $resolver['resolver']->setAuthorative($authorative);
+
         $this->authorative = $authorative;
         return $this;
     }
 
     /**
-     * @return bool The Authorative state.
-     * @seealso Resolver::setAuthorative
+     * @return bool The authorativeness of the resolvers
      */
     public function getAuthorative()
     {
@@ -113,202 +179,174 @@ class Resolver
     }
 
     /**
-     * Add a module to the search path of the Resolver.
+     * Register a module
      *
-     * @param string $name The name of the module. Just for logging purposes.
-     * @param string $path The path of the module.
-     * @param int $precedence The order in which the modules are searched.
-     *                        Lower means searched earlier.
+     * @param string $module The name of the module
+     * @param string $path The path where the module stores its data
+     * @param int $precedence Determines the order in which the paths are
+     *                        searched. Used for templates and assets, to
+     *                        make it possible to reliably override others.
      * @return Resolver Provides fluent interface
      */
-    public function addToSearchPath(string $name, string $path, int $precedence)
+    public function registerModule(string $module, string $path, int $precedence)
     {
-        if (!is_dir($path))
-            throw new \InvalidArgumentException("Path does not exist: " . $path);
+        // Normalize the module name: lowercased, with dots
+        $module = strtolower(preg_replace('/([\.\\/\\\\])/', '.', $module));
 
-        $this->search_path[$name] = array('path' => $path, 'precedence' => $precedence);
+        $found_elements = array();
+        foreach ($this->resolvers as $type => $resolver)
+        {
+            $type_path = $path . DIRECTORY_SEPARATOR . $resolver['path'];
+            if (is_dir($type_path))
+            {
+                $resolver['resolver']->addToSearchPath($module, $type_path, $precedence);
+                $found_elements[] = $type;
+            }
+        }
+
+        if (!empty($found_elements))
+            $this->modules[$module] = ['path' => $path, 'precedence' => $precedence];
+        else
+            self::getLogger()->debug("No resolvable items found in module: " . $module);
+
+        // No longer sorted, probably
+        $this->sorted = false;
+
+        return $this;
+    }
+
+    /**
+     * Sort the modules on precedence
+     */
+    protected function sortModules()
+    {
+        uasort($this->modules, function ($l, $r) {
+            if ($l['precedence'] !== $r['precedence'])
+                return $l['precedence'] - $r['precedence'];
+            return strcmp($l['path'], $r['path']);
+        });
+        $this->sorted = true;
+    }
+
+    /**
+     * @return array Associative array of (module_name, path) pairs
+     */
+    public function getModules()
+    {
+        if (!$this->sorted)
+            $this->sortModules();
+
+        $mods = [];
+        foreach ($this->modules as $name => $mod)
+            $mods[$name] = $mod['path'];
+
+        return $mods;
+    }
+
+    /**
+     * Set the precedence for a module on all resolvers.
+     * @param string $module The name of the module.
+     * @param int $precedence The precedence value, used to order the modules.
+     *                        Lower values come first.
+     * @return Resolver Provides fluent interface
+     */
+    public function setPrecedence(string $module, int $precedence)
+    {
+        foreach ($this->resolvers as $type => $resolver)
+        {
+            try
+            {
+                $resolver['resolver']->setPrecedence($module, $precedence);
+            }
+            catch (\InvalidArgumentException $e)
+            {} // Not all resolvers may contain this module
+        }
+
+        $this->modules[$module]['precedence'] = $precedence;
+
+        // No longer sorted, probably
         $this->sorted = false;
         
         return $this;
     }
 
-    protected function sortModules()
-    {
-        // Sort the paths so that the highest priority comes first
-        uasort($this->search_path, function ($l, $r) {
-            if ($l['precedence'] !== $r['precedence'])
-                return $l['precedence'] - $r['precedence'];
-            return strcmp($l['path'], $r['path']);
-        });
-
-        $this->sorted = true;
-    }
-
-    /** 
-     * Set the precedence value of a module
-     * @param string $name The name of the module
-     * @param int $precedence The precedence value to set
-     * @return Resolver Provides fluent interface
-     */
-    public function setPrecedence(string $name, int $precedence)
-    {
-        if (!isset($this->search_path[$name]))
-            throw new \InvalidArgumentException("Unknown module: " . $name);
-
-        if ($this->search_path[$name]['precedence'] !== $precedence)
-        {
-            $this->search_path[$name]['precedence'] = $precedence;
-            $this->sorted = false;
-        }
-        return $this;
-    }
-
     /**
-     * Get the precedence value of a module
-     * @param string $name The name of the module
-     * @return int The precedence value
-     */
-    public function getPrecedence(string $name)
-    {
-        if (!isset($this->search_path[$name]))
-            throw new \InvalidArgumentException("Unknown module: " . $name);
-
-        return $this->search_path[$name]['precedence'];
-    }
-
-    /**
-     * @return array A list of found modules
-     */
-    public function getSearchPath()
-    {
-        if (!$this->sorted)
-            $this->sortModules();
-
-        $sp = array();
-        foreach ($this->search_path as $name => $info)
-            $sp[$name] = $info['path'];
-        return $sp;
-    }
-
-    /** 
-     * Clear the search path
-     * @return Resolver Provides fluent interface
-     */
-    public function clearSearchPath()
-    {
-        $this->search_path = array();
-        $this->sorted = false;
-    }
-
-    /**
-     * Clear the cached resolved files
-     * @return Resolver Provides fluent interface
-     */
-    public function clearCache()
-    {
-        if ($this->cache !== null)
-            $this->cache->set('resolve', $this->name, array('data' => [], 'search_path' => $this->search_path));
-        return $this;
-    }
-
-    /**
-     * Obtain the cached data. The cache is cleared when the sort order does not match
-     * the cache.
+     * Discover the module configuration based on the Composer configuration
      *
-     * @return The cached data
+     * @param string $vendor_dir The Composer vendor path - e.g. MyProject/vendor
+     * @return Resolver Provides fluent interface
      */
-    protected function getCachedData()
+    public function autoConfigureFromComposer(string $vendor_dir)
     {
-        if ($this->cache === null)
-            return null;
+        $main_dir = dirname($vendor_dir);
 
-        $sp = $this->cache->get('resolve', $this->name, 'search_path');
-        if ($sp !== null)
-            $sp = $sp->toArray();
+        // Add the main module
+        $this->main_module = "main";
+        $package = $main_dir . DIRECTORY_SEPARATOR . "composer.json";
 
-        if ($this->search_path !== $sp)
-            $this->clearCache();
-
-        return $this->cache->get('resolve', $this->name);
-    }
-
-    /**
-     * Helper method that searches the core and modules for a specific type of file. 
-     * The files are evaluated in alphabetical order, and core always comes first.
-     *
-     * @param $type string The type to find, template or asset
-     * @param $file string The file to locate
-     * @return string A matching file. Null is returned if nothing was found.
-     */
-    public function resolve(string $file)
-    {
-        if (!$this->sorted)
-            $this->sortModules();
-
-        $file = ltrim($file, '/');
-        if ($this->ext !== null && substr($file, -strlen($this->ext)) !== $this->ext)
-            $file .= $this->ext;
-
-        $cache = $this->getCachedData();
-        $cached = $cache !== null ? $cache->get('data', $file) : null;
-
-        if ($cached === false && $this->authorative)
-            return null;
-
-        if (!empty($cached))
+        if (file_exists($package))
         {
-            if (file_exists($cached['path']) && is_readable($cached['path']))
+            // A composer.json file should exist for a composer project,
+            // so read the module name from that.
+            $json = @file_get_contents($package);
+            if ($contents)
             {
-                self::$logger->debug(
-                    "Resolved {0} {1} to path {2} (module: {3}) (cached)", 
-                    [$this->name, $file, $cached['path'], $cached['module']]
-                );
-                return $cached['path'];
+                $js = @json_decode($json);
+                if (isset($js['name']))
+                    $this->main_module = $js['name'];
+            }
+        }
+
+        // Register the main module with the highest precedence
+        $this->registerModule($this->main_module, $main_dir, 0);
+
+        $modules = $this->findModules($vendor_dir, "", 1);
+        ksort($modules);
+
+        $count = 0;
+        foreach ($modules as $name => $path)
+            $this->registerModule($name, $path, ++$count);
+
+        return $this;
+    }
+
+    /** 
+     * Find modules in the specified path
+     *
+     * @param string $path string Where to look for the modules
+     * @param string $module_name_prefix The prefix for the generated module names
+     * @param int $depth The depth at which to look for modules
+     */
+    public static function findModules(string $path, string $module_name_prefix, int $depth)
+    {
+        if (!is_dir($path))
+            throw new \InvalidArgumentException("Not a path: $path");
+
+        $dirs = dir($path);
+
+        $modules = array();
+        while ($dir = $dirs->read())
+        {
+            if ($dir === ".." || $dir === ".")
+                continue;
+
+            $mod_path = $path . DIRECTORY_SEPARATOR . $dir;
+            if (!is_dir($mod_path))
+                continue;
+
+            $dirname = ucfirst(strtolower($dir));
+            $module_name = $module_name_prefix . $dirname;
+            if ($depth > 0)
+            {
+                $sub_modules = self::findModules($mod_path, $module_name . '.', $depth - 1);
+                $modules = array_merge($modules, $sub_modules);
             }
             else
             {
-                self::$logger->error(
-                    "Cached path for {0} {1} from module {2} cannot be read: {3}", 
-                    [$this->name, $file, $cached['module'], $cached['path']]
-                );
+                $modules[$module_name] = $mod_path;
             }
         }
 
-        $path = null;
-        $found_module = null;
-        $mods = $this->search_path;
-
-        foreach ($mods as $module => $info)
-        {
-            $location = $info['path'];
-            self::$logger->debug("Trying {0} path: {1}/{2}", [$location, $this->name, $file]);
-            $path = $location . '/' . $file;
-
-            if (file_exists($path) && is_readable($path))
-            {
-                $found_module = $module;
-                break;
-            }
-        }
-
-        if ($found_module !== null)
-        {
-            self::$logger->debug("Resolved {0} {1} to path {2} (module: {3})", [$this->name, $file, $path, $found_module]);
-            if ($cache !== null)
-            {
-                $cache->set(
-                    'data',
-                    $file, 
-                    array("module" => $found_module, "path" => $path)
-                );
-            }
-            return $path;
-        }
-        elseif ($cache !== null)
-        {
-            $cache->set('data', $file, false);
-        }
-    
-        return null;
+        return $modules;
     }
 }
