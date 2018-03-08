@@ -289,9 +289,9 @@ class Resolver
             // A composer.json file should exist for a composer project,
             // so read the module name from that.
             $json = @file_get_contents($package);
-            if ($contents)
+            if ($json)
             {
-                $js = @json_decode($json);
+                $js = @json_decode($json, true);
                 if (isset($js['name']))
                     $this->main_module = $js['name'];
             }
