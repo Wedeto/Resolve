@@ -30,7 +30,9 @@ use org\bovigo\vfs\vfsStream;
 use org\bovigo\vfs\vfsStreamWrapper;
 use org\bovigo\vfs\vfsStreamDirectory;
 
-use Wedeto\Util\Cache;
+use Wedeto\Util\DI\DI;
+use Wedeto\Util\Cache\Cache;
+use Wedeto\Util\Cache\Manager as CacheManager;
 use Wedeto\Util\Dictionary;
 use Wedeto\Log\Logger;
 use Wedeto\Util\Type;
@@ -48,9 +50,17 @@ final class AutoloaderTest extends TestCase
         vfsStreamWrapper::register();
         vfsStreamWrapper::setRoot(new vfsStreamDirectory('cachedir'));
         $this->dir = vfsStream::url('cachedir');
-        Cache::setCachePath($this->dir);
+
+        DI::startNewContext('test');
+        $this->cmgr = DI::getInjector()->getInstance(CacheManager::class);
+        $this->cmgr->setCachePath($this->dir);
 
         Autoloader::setLogger(Logger::getLogger(Autoloader::class));
+    }
+
+    public function tearDown()
+    {
+        DI::destroyContext('test');
     }
 
     public function testLoggers()
@@ -122,7 +132,7 @@ final class AutoloaderTest extends TestCase
         $loader->registerNS('Foo\\Baz\\', $root . '/vendor2/lib/Foo/Baz');
         $loader->registerNS('Foobar\\', $root . '/vendor3/classes');
 
-        $cache = new Cache('resolve');
+        $cache = $this->cmgr->getCache('resolve');
         $loader->setCache($cache);
         $this->assertEquals($cache, $loader->getCache());
 
@@ -160,7 +170,7 @@ final class AutoloaderTest extends TestCase
         $loader->registerNS('Foo\\Bar\\', $root . '/vendor1/src');
         $loader->registerNS('Foo\\', $root . '/vendor2/src');
 
-        $cache = new Cache('resolve');
+        $cache = $this->cmgr->getCache('resolve');
         $loader->setCache($cache);
 
         $this->expectException(\LogicException::class);
@@ -182,7 +192,7 @@ final class AutoloaderTest extends TestCase
         $loader->registerNS('Foo\\Bar\\', $root . '/vendor1/src');
         $loader->registerNS('Foo\\', $root . '/vendor2/src', Autoloader::PSR0);
 
-        $cache = new Cache('resolve');
+        $cache = $this->cmgr->getCache('resolve');
         $loader->setCache($cache);
 
         $this->expectException(\LogicException::class);
@@ -413,7 +423,7 @@ CODE;
 
     public function testAutoloadWithCache()
     {
-        $cache = new Cache('Autoloader-test'); 
+        $cache = $this->cmgr->getCache('Autoloader-test'); 
         $root = $this->dir;
 
         mkdir($root . '/vendor3/src', 0777, true);
@@ -454,7 +464,7 @@ CODE;
 
     public function testAutoloadWithAuthorativeEnabled()
     {
-        $cache = new Cache('Autoloader-test'); 
+        $cache = $this->cmgr->getCache('Autoloader-test'); 
         $root = $this->dir;
 
         mkdir($root . '/vendor5/src', 0777, true);
@@ -491,7 +501,7 @@ CODE;
 
     public function testAutoloadWithAuthorativeEnabledAfterBuildCache()
     {
-        $cache = new Cache('Autoloader-test'); 
+        $cache = $this->cmgr->getCache('Autoloader-test'); 
         $root = $this->dir;
 
         mkdir($root . '/vendor6/src', 0777, true);

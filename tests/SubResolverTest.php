@@ -31,7 +31,9 @@ use org\bovigo\vfs\vfsStream;
 use org\bovigo\vfs\vfsStreamWrapper;
 use org\bovigo\vfs\vfsStreamDirectory;
 
-use Wedeto\Util\Cache;
+use Wedeto\Util\DI\DI;
+use Wedeto\Util\Cache\Cache;
+use Wedeto\Util\Cache\Manager as CacheManager;
 
 /**
  * @covers Wedeto\Resolve\SubResolver
@@ -46,7 +48,8 @@ final class SubResolverTest extends TestCase
         vfsStreamWrapper::register();
         vfsStreamWrapper::setRoot(new vfsStreamDirectory('cachedir'));
         $this->dir = vfsStream::url('cachedir');
-        Cache::setCachePath($this->dir);
+        $this->cmgr = DI::getInjector()->getInstance(CacheManager::class);
+        $this->cmgr->setCachePath($this->dir);
     }
 
     public function testSubResolver()
@@ -72,7 +75,7 @@ final class SubResolverTest extends TestCase
 
         $resolver = new SubResolver('css');
         $this->assertEquals('css', $resolver->getName());
-        $cache = new Cache('wedeto-resolve');
+        $cache = $this->cmgr->getCache('wedeto-resolve');
         $resolver->setCache($cache);
         $this->assertEquals($cache, $resolver->getCache());
 
@@ -135,7 +138,7 @@ final class SubResolverTest extends TestCase
         touch($root . '/module1/files/foo/test2.css');
 
         $resolver = new SubResolver('css');
-        $cache = new Cache('wedeto-resolve');
+        $cache = $this->cmgr->getCache('wedeto-resolve');
         $resolver->setCache($cache);
         $this->assertEquals($cache, $resolver->getCache());
 
@@ -175,7 +178,7 @@ final class SubResolverTest extends TestCase
         touch($root . '/module1/files/foo/test2.css');
 
         $resolver = new SubResolver('css');
-        $cache = new Cache('wedeto-resolve');
+        $cache = $this->cmgr->getCache('wedeto-resolve');
         $resolver->setCache($cache);
         $this->assertEquals($cache, $resolver->getCache());
 
@@ -236,8 +239,8 @@ final class SubResolverTest extends TestCase
         touch($root . '/module2/files/foo/test1.css');
 
         $resolver = new SubResolver('css');
-        $cache = new Cache('wedeto-resolve');
-        $resolver->setCache(new Cache('wedeto-resolve'));
+        $cache = $this->cmgr->getCache('wedeto-resolve');
+        $resolver->setCache($cache);
 
         // Add the module path
         $resolver->addToSearchPath('mod1', $root . '/module1', 1);

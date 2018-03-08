@@ -28,7 +28,7 @@ use ReflectionClass;
 
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
-use Wedeto\Util\Cache;
+use Wedeto\Util\Cache\Cache;
 use Wedeto\Util\DefVal;
 
 /**

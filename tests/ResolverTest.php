@@ -30,7 +30,9 @@ use org\bovigo\vfs\vfsStream;
 use org\bovigo\vfs\vfsStreamWrapper;
 use org\bovigo\vfs\vfsStreamDirectory;
 
-use Wedeto\Util\Cache;
+use Wedeto\Util\DI\DI;
+use Wedeto\Util\Cache\Cache;
+use Wedeto\Util\Cache\Manager as CacheManager;
 
 /**
  * @covers Wedeto\Resolve\Resolver
@@ -46,8 +48,15 @@ final class ResolverTest extends TestCase
         vfsStreamWrapper::register();
         vfsStreamWrapper::setRoot(new vfsStreamDirectory('cachedir'));
         $this->dir = vfsStream::url('cachedir');
-        Cache::setCachePath($this->dir);
-        $this->cache = new Cache('resolve');
+        DI::startNewContext('test');
+        $this->cmgr = DI::getInjector()->getInstance(CacheManager::class);
+        $this->cmgr->setCachePath($this->dir);
+        $this->cache = $this->cmgr->getCache('resolve');
+    }
+
+    public function tearDown()
+    {
+        DI::destroyContext('test');
     }
 
     public function testResolver()

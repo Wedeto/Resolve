@@ -31,7 +31,9 @@ use org\bovigo\vfs\vfsStream;
 use org\bovigo\vfs\vfsStreamWrapper;
 use org\bovigo\vfs\vfsStreamDirectory;
 
-use Wedeto\Util\Cache;
+use Wedeto\Util\DI\DI;
+use Wedeto\Util\Cache\Cache;
+use Wedeto\Util\Cache\Manager as CacheManager;
 
 /**
  * @covers Wedeto\Resolve\Router
@@ -46,7 +48,8 @@ final class RouterTest extends TestCase
         vfsStreamWrapper::register();
         vfsStreamWrapper::setRoot(new vfsStreamDirectory('router'));
         $this->dir = vfsStream::url('router');
-        Cache::setCachePath($this->dir);
+        $this->cmgr = DI::getInjector()->getInstance(CacheManager::class);
+        $this->cmgr->setCachePath($this->dir);
     }
 
     public function testRouterGetAndSetModules()
@@ -161,7 +164,7 @@ final class RouterTest extends TestCase
 
     public function testRouterWithCache()
     {
-        $cache = new Cache('resolve');
+        $cache = $this->cmgr->getCache('resolve');
 
         $root = $this->dir;
         mkdir($root . '/mod1/app', 0777, true);

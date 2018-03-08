@@ -25,7 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 namespace Wedeto\Resolve;
 
 use Wedeto\Util\LoggerAwareStaticTrait;
-use Wedeto\Util\Cache;
+use Wedeto\Util\Cache\Cache;
 
 /**
  * Resolve templates assets from registered modules / locations
