@@ -4,7 +4,7 @@
     "description": "Wedeto Platform - Autoloader, template, asset and app resolver",
     "homepage": "https://wedeto.net/",
     "require": {
-        "Wedeto/Util": ">=0.9.9",
+        "Wedeto/Util": ">=0.9.14",
         "php": ">=7.0.0"
     },
     "require-dev": {
