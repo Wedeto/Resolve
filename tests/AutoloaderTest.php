@@ -35,7 +35,7 @@ use Wedeto\Util\Cache\Cache;
 use Wedeto\Util\Cache\Manager as CacheManager;
 use Wedeto\Util\Dictionary;
 use Wedeto\Log\Logger;
-use Wedeto\Util\Type;
+use Wedeto\Util\Validation\Type;
 
 /**
  * @covers Wedeto\Resolve\Autoloader
