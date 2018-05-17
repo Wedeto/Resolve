@@ -4,12 +4,12 @@
     "description": "Wedeto Platform - Autoloader, template, asset and app resolver",
     "homepage": "https://wedeto.net/",
     "require": {
-        "Wedeto/Util": ">=0.9.14",
+        "Wedeto/Util": "~1.0.0-beta1",
         "php": ">=7.0.0"
     },
     "require-dev": {
         "mikey179/vfsStream": "~1",
-        "Wedeto/Log": ">=0.9.0"
+        "Wedeto/Log": "~1.0.0-beta1"
     },
     "autoload": {
         "psr-4": {
