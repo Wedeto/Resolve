@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- Avoid using `null` as an array key while resolving the root route on PHP 8.5.
+
 ## 1.1.0
 
 - Add support for PHP 8.1 through PHP 8.5.

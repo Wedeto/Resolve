@@ -112,7 +112,7 @@ class Route implements Serializable
     {
         $part = array_shift($parts);
 
-        $sub_part = $part;
+        $sub_part = $part ?? '';
         if (!empty($ext) && substr($part, -strlen($ext)) === $ext)
             $sub_part = substr($part, 0, -strlen($ext));
 

@@ -97,6 +97,23 @@ final class RouteTest extends TestCase
         ], $route);
     }
 
+    public function testResolveEmptyRouteWithoutDeprecations()
+    {
+        set_error_handler(function ($severity, $message, $file, $line) {
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+
+        try
+        {
+            $route = $this->root->resolve([], '');
+            $this->assertSame('/index.php', $route['path']);
+        }
+        finally
+        {
+            restore_error_handler();
+        }
+    }
+
     public function testResolveRouteWithJsonAndGenericApp()
     {
         $route = $this->root->resolve(array('foo', 'bar'), '');
