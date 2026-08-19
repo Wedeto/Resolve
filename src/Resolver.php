@@ -53,7 +53,7 @@ class Resolver
      * Set up the manager.
      * @param Cache $cache The cache to use for the resolvers.
      */
-    public function __construct(Cache $cache = null)
+    public function __construct(?Cache $cache = null)
     {
         $this->cache = $cache;
     }
@@ -68,7 +68,7 @@ class Resolver
      *                           instantiated. Cannot be used in combination with $extension
      * @return Resolver Provides fluent interface
      */
-    public function addResolverType(string $type, string $path, string $extension = "", SubResolver $instance = null)
+    public function addResolverType(string $type, string $path, string $extension = "", ?SubResolver $instance = null)
     {
         // Check argument validity
         if (isset($this->resolvers[$type]))

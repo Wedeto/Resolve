@@ -44,7 +44,7 @@ final class AutoloaderTest extends TestCase
 {
     private $dir;
 
-    public function setUp()
+    public function setUp(): void
     {
         // Make the cache use a virtual test path
         vfsStreamWrapper::register();
@@ -58,7 +58,7 @@ final class AutoloaderTest extends TestCase
         Autoloader::setLogger(Logger::getLogger(Autoloader::class));
     }
 
-    public function tearDown()
+    public function tearDown(): void
     {
         DI::destroyContext('test');
     }

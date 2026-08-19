@@ -34,7 +34,7 @@ final class RouteTest extends TestCase
 {
     private $root;
 
-    public function setUp()
+    public function setUp(): void
     {
         $this->root = new Route("/", 0);
 

@@ -180,4 +180,14 @@ class Route implements Serializable
         $this->apps = $data['apps'];
         $this->children = $data['children'];
     }
+
+    public function __serialize(): array
+    {
+        return unserialize($this->serialize());
+    }
+
+    public function __unserialize(array $data): void
+    {
+        $this->unserialize(serialize($data));
+    }
 }

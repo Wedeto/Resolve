@@ -42,7 +42,7 @@ final class ResolverTest extends TestCase
     private $dir;
     private $cache;
 
-    public function setUp()
+    public function setUp(): void
     {
         // Make the cache use a virtual test path
         vfsStreamWrapper::register();
@@ -54,7 +54,7 @@ final class ResolverTest extends TestCase
         $this->cache = $this->cmgr->getCache('resolve');
     }
 
-    public function tearDown()
+    public function tearDown(): void
     {
         DI::destroyContext('test');
     }
@@ -319,4 +319,3 @@ final class ResolverTest extends TestCase
 
     }
 }
-

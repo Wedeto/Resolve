@@ -42,7 +42,7 @@ final class SubResolverTest extends TestCase
 {
     private $dir;
 
-    public function setUp()
+    public function setUp(): void
     {
         // Make the cache use a virtual test path
         vfsStreamWrapper::register();

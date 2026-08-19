@@ -57,7 +57,7 @@ class SubResolver
      *
      * @param string $name The name of the resolver (Eg type of files resolved)
      */
-    public function __construct(string $name, string $ext = null)
+    public function __construct(string $name, ?string $ext = null)
     {
         self::getLogger();
         $this->name = $name;
